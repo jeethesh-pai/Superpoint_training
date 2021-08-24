@@ -58,7 +58,7 @@ class SuperPointNet(torch.nn.Module):
         desc = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
         return {'semi': semi, 'desc': desc}  # semi is the detector head and desc is the descriptor head
 
-    def train_mode(self, sample_dict: dict) -> torch.Tensor:
+    def train_mode(self, sample_dict: dict) -> dict:
         if torch.cuda.is_available():
             sample_dict['image'] = sample_dict['image'].to('cuda')
             sample_dict['warped_image'] = sample_dict['warped_image'].to('cuda')
@@ -66,19 +66,21 @@ class SuperPointNet(torch.nn.Module):
             sample_dict['warped_label'] = sample_dict['warped_label'].to('cuda')
         batch_size, numHomoIter = sample_dict['warped_image'].shape[:2]
         (_, semi), (_, desc) = self.forward(sample_dict['image']).items()
-        det_loss = detector_loss(sample_dict['label'], semi, mask=sample_dict['valid_mask'])
+        (_, det_loss), (_, det_iou) = detector_loss(sample_dict['label'], semi, mask=sample_dict['valid_mask']).items()
         det_loss_warp, desc_loss_warp = [], []
         for i in range(batch_size):  # iterate over batch_size
             # warped image is having dimension [Batch_size, NumOfHomoIter, height, width]
             (_, semi_warp), (_, desc_warp) = self.forward(sample_dict['warped_image'][i, :, :, :].unsqueeze(1)).items()
-            det_loss_warp.append(detector_loss(sample_dict['warped_label'][i, :, :, :], output=semi_warp,
-                                               mask=sample_dict['warped_mask'][i, :, :, :]))
+            det_loss_warp_dict = detector_loss(sample_dict['warped_label'][i, :, :, :], output=semi_warp,
+                                               mask=sample_dict['warped_mask'][i, :, :, :])
+            det_loss_warp.append(det_loss_warp_dict['loss'])
+            det_iou = torch.add(det_iou, det_loss_warp_dict['iou']) / 2
             desc_loss_warp.append(
                 descriptor_loss_2(desc[i, :, :, :], desc_warp, homography=sample_dict['homography'][i, :, :, :],
                                   margin_neg=0.2, margin_pos=1.0, lambda_d=250, threshold=8,
                                   valid_mask=sample_dict['warped_mask'][i, :, :, :]))
         det_loss_total = det_loss + sum(det_loss_warp) + sum(desc_loss_warp)
-        return det_loss_total
+        return {'loss': det_loss_total, 'iou': det_iou}
 
 
 def load_model(checkpoint_path: str, model: torch.nn.Module, optimizer: torch.optim.Optimizer, epoch: int):
