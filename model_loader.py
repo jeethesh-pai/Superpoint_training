@@ -1,5 +1,6 @@
 import torch
-from utils import detector_loss, descriptor_loss_2
+from utils import detector_loss, descriptor_loss_2, flattenDetection, nms_fast
+import numpy as np
 
 
 class SuperPointNet(torch.nn.Module):
@@ -82,6 +83,42 @@ class SuperPointNet(torch.nn.Module):
         det_loss_total = det_loss + sum(det_loss_warp) + sum(desc_loss_warp)
         return {'loss': det_loss_total, 'iou': det_iou}
 
+    def eval_mode(self, image: np.ndarray, conf_threshold: float, H: int, W: int, dist_thresh: float) -> tuple:
+        with torch.no_grad():
+            (_, semi), (_, desc) = self.forward(torch.from_numpy(image[np.newaxis, np.newaxis, :, :]).to('cuda')).items()
+            heatmap = flattenDetection(semi).cpu().numpy().squeeze()
+            xs, ys = np.where(heatmap >= conf_threshold)
+            if len(xs) == 0:
+                return np.zeros((3, 0)), None, None
+            pts = np.zeros((3, len(xs)))
+            pts[0, :] = ys
+            pts[1, :] = xs
+            pts[2, :] = heatmap[xs, ys]
+            pts, _ = nms_fast(pts, H, W, dist_thresh=dist_thresh)
+            inds = np.argsort(-pts[2, :])  # sort by confidence
+            bord = 4  # border to remove
+            toremoveW = np.logical_or(pts[0, :] < bord, pts[0, :] >= (W - bord))
+            toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
+            toremove = np.logical_or(toremoveW, toremoveH)
+            pts = pts[:, ~toremove]
+            #  -- process descriptor
+            D = desc.shape[1]
+            if pts.shape[1] == 0:
+                desc = np.zeros((D, 0))
+            else:
+                samp_pts = torch.from_numpy(pts[:2, :].copy())
+                samp_pts[0, :] = (samp_pts[0, :] / (float(W) / 2.)) - 1.
+                samp_pts[1, :] = (samp_pts[1, :] / (float(H) / 2.)) - 1.
+                samp_pts = samp_pts.transpose(0, 1).contiguous()
+                samp_pts = samp_pts.view(1, 1, -1, 2)
+                samp_pts = samp_pts.float()
+                if self.cuda:
+                    samp_pts = samp_pts.cuda()
+                desc = torch.nn.functional.grid_sample(desc, samp_pts)
+                desc = desc.data.cpu().numpy().reshape(D, -1)
+                desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]
+            return pts, desc, heatmap
+
 
 def load_model(checkpoint_path: str, model: torch.nn.Module, optimizer: torch.optim.Optimizer, epoch: int):
     print('loading model: SuperPointNet ..............')
@@ -90,8 +127,7 @@ def load_model(checkpoint_path: str, model: torch.nn.Module, optimizer: torch.op
         epoch = epoch
         optimizer = optimizer
     else:  # if all data about training is available
-        checkpoint = torch.load(checkpoint_path)
-        model.load_state_dict(checkpoint["model_state_dict"])
-        epoch = checkpoint["epoch"]
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    return model, epoch, optimizer
+        model = torch.load(checkpoint_path)
+        # epoch = checkpoint["epoch"]
+        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    return model

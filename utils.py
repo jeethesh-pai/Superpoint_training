@@ -295,17 +295,16 @@ def warp_points(points, homographies, device='cpu'):
     batch_size = homographies.shape[1]
     points = torch.cat((points.float(), torch.ones((points.shape[0], 1)).to(device)), dim=1)
     points = points.to(device)
-    homographies = homographies.view(batch_size*3,3)
+    homographies = homographies.view(batch_size * 3, 3)
     # warped_points = homographies*points
     # points = points.double()
-    warped_points = homographies@points.transpose(0,1)
+    warped_points = homographies @ points.transpose(0, 1)
     # warped_points = np.tensordot(homographies, points.transpose(), axes=([2], [0]))
     # normalize the points
     warped_points = warped_points.view([batch_size, 3, -1])
     warped_points = warped_points.transpose(2, 1)
     warped_points = warped_points[:, :, :2] / warped_points[:, :, 2:]
-    return warped_points[0,:,:] if no_batches else warped_points
-
+    return warped_points[0, :, :] if no_batches else warped_points
 
 
 def get_grid(x, y, homogenous=False):
@@ -358,7 +357,7 @@ def labels2Dto3D(labels, cell_size, add_dustbin=True):
         return label
 
 
-def flattenDetection(semi, tensor=False):
+def flattenDetection(semi):
     """
     Flatten detection output
 
@@ -497,7 +496,7 @@ def nms_fast(in_corners, H, W, dist_thresh):
         return np.zeros((3, 0)).astype(int), np.zeros(0).astype(int)
     if rcorners.shape[1] == 1:
         out = np.vstack((rcorners, in_corners[2])).reshape(3, 1)
-        return out, np.zeros((1)).astype(int)
+        return out, np.zeros(1).astype(int)
     # Initialize the grid.
     for i, rc in enumerate(rcorners.T):
         grid[rcorners[1, i], rcorners[0, i]] = 1
@@ -605,7 +604,8 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, mask=None) -> dict
     entropy_loss = CE_loss(output, labels3D.to('cuda'))
     mask3D = labels2Dto3D(mask, cell_size=8, add_dustbin=False).float()
     mask3D = torch.prod(mask3D, dim=1).to('cuda')
-    loss = (entropy_loss * mask3D).sum() / (mask3D.sum() + 1e-10)  # add a small number to avoid division by zero
+    loss = (entropy_loss * mask3D).sum() / (mask3D.sum() + 1e-10) / target.shape[0]
+    # add a small number to avoid division by zero
     return {'loss': loss, 'iou': iou}
 
 
@@ -636,8 +636,8 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
         negative_corr = torch.max(desc_product_sum - margin_neg * torch.ones_like(desc_product_sum),
                                   torch.zeros_like(desc_product_sum))
         loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr) * mask3D[i, :, :]
-        loss.append(loss_desc.sum()/ mask3D.sum())
-    return sum(loss)
+        loss.append(loss_desc.sum() / mask3D.sum())
+    return sum(loss) / batch_size
 
 
 def descriptor_loss(descriptors, descriptors_warped, homographies, mask_valid=None,
@@ -798,3 +798,34 @@ def crop_or_pad_choice(in_num_points, out_num_points, shuffle=False):
         pad = np.random.choice(choice, num_pad, replace=True)
         choice = np.concatenate([choice, pad])
     return choice
+
+
+def nn_match_descriptor(desc1: torch.Tensor, desc2: torch.Tensor, nn_thresh: float):
+    assert desc1.shape[0] == desc2.shape[0]
+    if desc1.shape[1] == 0 or desc2.shape[1] == 0:
+        return np.zeros((3, 0))
+    if nn_thresh < 0.0:
+        raise ValueError('\'nn_thresh\' should be non-negative')
+    dmat = np.dot(desc1.T, desc2)
+    dmat = np.sqrt(2 - 2 * np.clip(dmat, -1, 1))
+    # Get NN indices and scores.
+    idx = np.argmin(dmat, axis=1)
+    scores = dmat[np.arange(dmat.shape[0]), idx]
+    # Threshold the NN matches.
+    keep = scores < nn_thresh
+    # Check if nearest neighbor goes both directions and keep those.
+    idx2 = np.argmin(dmat, axis=0)
+    keep_bi = np.arange(len(idx)) == idx2[idx]
+    keep = np.logical_and(keep, keep_bi)
+    idx = idx[keep]
+    scores = scores[keep]
+    # Get the surviving point indices.
+    m_idx1 = np.arange(desc1.shape[1])[keep]
+    m_idx2 = idx
+    # Populate the final 3xN match data structure.
+    matches = np.zeros((3, int(keep.sum())))
+    matches[0, :] = m_idx1
+    matches[1, :] = m_idx2
+    matches[2, :] = scores
+    return matches
+

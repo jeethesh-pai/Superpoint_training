@@ -23,7 +23,7 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['ev
 Net = SuperPointNet()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
-Net, epoch, optimizer = load_model(config['pretrained'], Net, optimizer, epochs)
+Net = load_model(config['pretrained'], Net, optimizer, epochs)
 if torch.cuda.is_available():
     Net.cuda()
 summary(Net, (1, 320, 240), batch_size=1)
@@ -31,9 +31,9 @@ if config['data']['generate_label']:
     label_path = config['data']['label_path']
     if not os.path.isdir(label_path):
         os.mkdir(label_path)
-    for i, sample in tqdm.tqdm(enumerate(train_loader)):
+    for i, sample in enumerate(tqdm.tqdm(train_loader)):
         with torch.no_grad():
-            output = Net(sample['image'].cuda().unsqueeze(0))
+            output = Net(sample['image'].cuda())
             keypoint, descriptor = output['semi'], output['desc']
             heatmap = flattenDetection(keypoint, True).cpu().numpy().squeeze()
             det_threshold = config['model']['detection_threshold']
