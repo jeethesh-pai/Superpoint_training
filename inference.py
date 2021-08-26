@@ -34,7 +34,7 @@ def offset_keypoint(keypoint: list, img1_shape: tuple) -> list:
 def extract_superpoint_desc_keypoints(model: torch.nn.Module, img: str, size: tuple,
                                       conf_threshold=0.015, dist_thresh=4):
     img_gray = image_preprocess(img, size=size)
-    keypoint, descriptor, heatmap = model.eval_mode(img_gray, conf_threshold, 640, 480, dist_thresh)
+    keypoint, descriptor, heatmap = model.eval_mode(img_gray, conf_threshold, size[1], size[0], dist_thresh)
     keypoint = np.transpose(keypoint)
     keypoint = [cv2.KeyPoint(int(point[0]), int(point[1]), 1) for point in keypoint]
     return keypoint, descriptor
@@ -86,13 +86,61 @@ def draw_matches_superpoint(img1: str, img2: str, nn_thresh: float, size: tuple)
     return combined_image, kp_image
 
 
+def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
+    keypoint1, descriptor1 = extract_superpoint_desc_keypoints(Net, img1, size=size)
+    keypoint2, descriptor2 = extract_superpoint_desc_keypoints(Net, img2, size=size)
+    sift = cv2.SIFT_create()
+    img1, img2 = (image_preprocess(img1, size) * 255).astype(np.uint8), \
+                 (image_preprocess(img2, size) * 255).astype(np.uint8)
+    descriptor1 = sift.compute(img1, keypoint1)
+    descriptor2 = sift.compute(img2, keypoint2)
+    FLANN_INDEX_KDTREE = 1
+    index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+    search_params = dict(checks=50)  # or pass empty dictionary
+    flann = cv2.FlannBasedMatcher(index_params, search_params)
+    matches = flann.knnMatch(descriptor1[1], descriptor2[1], k=2)
+    # Need to draw only good matches, so create a mask
+    matchesMask = [[0, 0] for i in range(len(matches))]
+    # ratio test as per Lowe's paper
+    for i, (m, n) in enumerate(matches):
+        if m.distance < 0.7 * n.distance:
+            matchesMask[i] = [1, 0]
+    draw_params = dict(matchColor=(0, 255, 0),
+                       singlePointColor=(255, 0, 0),
+                       matchesMask=matchesMask,
+                       flags=cv2.DrawMatchesFlags_DEFAULT)
+    img3 = cv2.drawMatchesKnn(img1, keypoint1, img2, keypoint2, matches, None, **draw_params)
+    plt.imshow(img3)
+    plt.title('Flann based matcher With sift descriptor')
+    plt.show()
+    # ratio test as per Lowe's paper
+    good = []
+    for m, n in matches:
+        if m.distance < 0.7 * n.distance:
+            good.append(m)
+    src_pts = np.float32([keypoint1[m.queryIdx].pt for m in good]).reshape(-1, 1, 2)
+    dst_pts = np.float32([keypoint2[m.trainIdx].pt for m in good]).reshape(-1, 1, 2)
+    M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC)
+    matchesMask = mask.ravel().tolist()
+    draw_params = dict(matchColor=(0, 255, 0),  # draw matches in green color
+                       singlePointColor=None,
+                       matchesMask=matchesMask,  # draw only inliers
+                       flags=2)
+    img3 = cv2.drawMatches(img1, keypoint1, img2, keypoint2, good, None, **draw_params)
+    plt.imshow(img3)
+    plt.title('Homography match with sift descriptor')
+    plt.show()
+    return descriptor1, descriptor2
+
+
 image_dir = "../pytorch-superpoint/datasets/TLS_Train/Test/"
 Net = SuperPointNet()
-checkpoint_path = "Remote_log/best_model.pt"
-Net = load_model(checkpoint_path, Net, optimizer=torch.optim.Adam(Net.parameters(), lr=1e-4), epoch=0)
-image1 = image_dir + "IMG_2035.JPG"
-image2 = image_dir + "rgb_syn_library_w1.jpg"
-combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.7, size=(480, 640))
+checkpoint_path = "colab_log/best_model.pt"
+Net = load_model(checkpoint_path, Net)
+image1 = image_dir + "IMG_2039.JPG"
+image2 = image_dir + "rgb_syn_library_xzphiwk1.jpg"
+# desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
+combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.7, size=(856, 576))
 plt.imshow(combined)
 plt.title('Correspondence Image')
 plt.show()

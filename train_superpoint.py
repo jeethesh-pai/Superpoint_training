@@ -23,7 +23,7 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['ev
 Net = SuperPointNet()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
-Net = load_model(config['pretrained'], Net, optimizer, epochs)
+Net = load_model(config['pretrained'], Net)
 if torch.cuda.is_available():
     Net.cuda()
 summary(Net, (1, 320, 240), batch_size=1)
@@ -35,7 +35,7 @@ if config['data']['generate_label']:
         with torch.no_grad():
             output = Net(sample['image'].cuda())
             keypoint, descriptor = output['semi'], output['desc']
-            heatmap = flattenDetection(keypoint, True).cpu().numpy().squeeze()
+            heatmap = flattenDetection(keypoint).cpu().numpy().squeeze()
             det_threshold = config['model']['detection_threshold']
             heatmap[heatmap < det_threshold] = 0  # as per confidence threshold given in Daniel De Tone paper.
             heatmap[heatmap >= det_threshold] = 1
@@ -56,39 +56,39 @@ else:  # training with given label and augmentations
         running_loss, batch_iou = 0, 0
         for count, sample in enumerate(tqdm.tqdm(train_loader)):
             optimizer.zero_grad()
-            # fig, axes = plt.subplots(2, 2)
-            # axes[0, 0].imshow(sample['image'].numpy()[0, :, :, :].squeeze(), cmap='gray')
-            # axes[0, 1].imshow(sample['warped_image'].numpy()[0, 1, :, :].squeeze(), cmap='gray')
-            # axes[1, 0].imshow(sample['label'][0, :, :, :].numpy().squeeze(), cmap='gray')
-            # axes[1, 1].imshow(sample['warped_label'][0, 1, :, :].numpy().squeeze(), cmap='gray')
-            # plt.show()
-            (_, loss), (_, iou) = Net.train_mode(sample).items()
-            loss.backward()
-            if count == 0:
-                batch_iou = iou
-            batch_iou = torch.add(batch_iou, iou) / 2
-            running_loss += loss.item()
-            optimizer.step()
-        print(f'Training Loss for the epoch-{n_iter}: {running_loss / len(train_loader)}, IoU: {batch_iou}')
-        val_loss, val_iou = 0, 0
-        for count_val, sample_val in tqdm.tqdm(enumerate(val_loader)):
-            with torch.no_grad():
-                (_, curr_loss), (_, curr_iou) = Net.train_mode(sample_val).items()
-                val_loss += curr_loss
-                if count_val == 0:
-                    val_iou = curr_iou
-                val_iou = (val_iou + curr_iou) / 2
-        if n_iter == 0:
-            prev_val_loss = val_loss
-            torch.save(Net, "saved_path/best_model.pt")
-        if val_loss < prev_val_loss and n_iter > 0:
-            print('saving best model...')
-            torch.save(Net, "saved_path/best_model.pt")
-        print(f'Val Loss for the epoch-{n_iter}: {val_loss / len(val_loader)}, Val_IoU: {val_iou}')
-        writer.add_scalar('Loss', running_loss, n_iter + 1)
-        writer.add_scalar('Val_loss', val_loss, n_iter + 1)
-        writer.add_scalar('IoU', batch_iou, n_iter + 1)
-        writer.add_scalar('Val_IoU', val_iou, n_iter + 1)
-        writer.flush()
-        n_iter += 1
-    writer.close()
+            fig, axes = plt.subplots(2, 2)
+            axes[0, 0].imshow(sample['image'].numpy()[0, :, :, :].squeeze(), cmap='gray')
+            axes[0, 1].imshow(sample['warped_image'].numpy()[0, 1, :, :].squeeze(), cmap='gray')
+            axes[1, 0].imshow(sample['label'][0, :, :, :].numpy().squeeze(), cmap='gray')
+            axes[1, 1].imshow(sample['warped_label'][0, 1, :, :].numpy().squeeze(), cmap='gray')
+            plt.show()
+    #        (_, loss), (_, iou) = Net.train_mode(sample).items()
+    #         loss.backward()
+    #         if count == 0:
+    #             batch_iou = iou
+    #         batch_iou = torch.add(batch_iou, iou) / 2
+    #         running_loss += loss.item()
+    #         optimizer.step()
+    #     print(f'Training Loss for the epoch-{n_iter}: {running_loss / len(train_loader)}, IoU: {batch_iou}')
+    #     val_loss, val_iou = 0, 0
+    #     for count_val, sample_val in tqdm.tqdm(enumerate(val_loader)):
+    #         with torch.no_grad():
+    #             (_, curr_loss), (_, curr_iou) = Net.train_mode(sample_val).items()
+    #             val_loss += curr_loss
+    #             if count_val == 0:
+    #                 val_iou = curr_iou
+    #             val_iou = (val_iou + curr_iou) / 2
+    #     if n_iter == 0:
+    #         prev_val_loss = val_loss
+    #         torch.save(Net, "saved_path/best_model.pt")
+    #     if val_loss < prev_val_loss and n_iter > 0:
+    #         print('saving best model...')
+    #         torch.save(Net, "saved_path/best_model.pt")
+    #     print(f'Val Loss for the epoch-{n_iter}: {val_loss / len(val_loader)}, Val_IoU: {val_iou}')
+    #     writer.add_scalar('Loss', running_loss, n_iter + 1)
+    #     writer.add_scalar('Val_loss', val_loss, n_iter + 1)
+    #     writer.add_scalar('IoU', batch_iou, n_iter + 1)
+    #     writer.add_scalar('Val_IoU', val_iou, n_iter + 1)
+    #     writer.flush()
+    #     n_iter += 1
+    # writer.close()

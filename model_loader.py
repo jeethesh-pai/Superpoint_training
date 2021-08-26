@@ -120,14 +120,10 @@ class SuperPointNet(torch.nn.Module):
             return pts, desc, heatmap
 
 
-def load_model(checkpoint_path: str, model: torch.nn.Module, optimizer: torch.optim.Optimizer, epoch: int):
+def load_model(checkpoint_path: str, model: torch.nn.Module):
     print('loading model: SuperPointNet ..............')
     if checkpoint_path[-4:] == '.pth':  # if only state_dict ie, weights of the file are stored
         model.load_state_dict(torch.load(checkpoint_path))
-        epoch = epoch
-        optimizer = optimizer
     else:  # if all data about training is available
         model = torch.load(checkpoint_path)
-        # epoch = checkpoint["epoch"]
-        # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     return model

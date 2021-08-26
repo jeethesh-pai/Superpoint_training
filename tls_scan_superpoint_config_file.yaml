@@ -1,7 +1,7 @@
 data:
     dataset: 'TLSScanData'
-    generate_label: false
-    labels: true
+    generate_label: true
+    labels: false
     label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'
     # labels: "logs/magicpoint_tls_labels/predictions"
     root: '../pytorch-superpoint/datasets/TLS_Train' # datasets/COCO
@@ -13,7 +13,7 @@ data:
             GaussianBlur: {sigma: 0.2}
     cache_in_memory: false
     preprocessing:
-        resize: [240, 320]  # width, height
+        resize: [640, 432]  # width, height
         # resize: [480, 640]
     augmentation:
         photometric:
@@ -32,7 +32,7 @@ data:
                 motion_blur: {max_kernel_size: 3}
         homographic:
             enable: true
-            num: 2 # 100
+            num: 3 # 100
             aggregation: 'sum'
             filter_counts: 0
             homographies:
@@ -41,25 +41,12 @@ data:
                     rotation: true
                     scaling: true
                     perspective: true
-                    scaling_amplitude: 0.1
-                    perspective_amplitude_x: 0.1
-                    perspective_amplitude_y: 0.1
+                    scaling_amplitude: 1
+                    perspective_amplitude_x: 0.3
+                    perspective_amplitude_y: 0.3
                     allow_artifacts: true
                     patch_ratio: 0.85
                     max_angle: 0.785
-    warped_pair:
-        enable: false
-        params:
-            translation: true
-            rotation: true
-            scaling: true
-            perspective: true
-            scaling_amplitude: 0.2
-            perspective_amplitude_x: 0.2
-            perspective_amplitude_y: 0.2
-            patch_ratio: 0.85
-            max_angle: 1.57
-            allow_artifacts: true # true
         valid_border_margin: 3
 
 front_end_model: 'Train_model_heatmap'  # 'Train_model_frontend'
@@ -76,8 +63,8 @@ model:
     }
     detector_loss:
         loss_type: 'softmax'
-    batch_size: 2 # 32
-    eval_batch_size: 2 # 32
+    batch_size: 1 # 32
+    eval_batch_size: 1 # 32
     learning_rate: 0.0001 # 0.0001
     detection_threshold: 0.015 # 0.015
     lambda_loss: 1 # 1

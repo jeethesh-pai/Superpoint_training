@@ -291,16 +291,11 @@ def warp_points(points, homographies, device='cpu'):
     # expand points len to (x, y, 1)
     no_batches = len(homographies.shape) == 2
     homographies = homographies.unsqueeze(0) if no_batches else homographies
-    # homographies = homographies.unsqueeze(0) if len(homographies.shape) == 2 else homographies
     batch_size = homographies.shape[1]
     points = torch.cat((points.float(), torch.ones((points.shape[0], 1)).to(device)), dim=1)
     points = points.to(device)
     homographies = homographies.view(batch_size * 3, 3)
-    # warped_points = homographies*points
-    # points = points.double()
     warped_points = homographies @ points.transpose(0, 1)
-    # warped_points = np.tensordot(homographies, points.transpose(), axes=([2], [0]))
-    # normalize the points
     warped_points = warped_points.view([batch_size, 3, -1])
     warped_points = warped_points.transpose(2, 1)
     warped_points = warped_points[:, :, :2] / warped_points[:, :, 2:]
