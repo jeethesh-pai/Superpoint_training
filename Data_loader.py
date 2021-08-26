@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 
 def points_to_2D(points: np.ndarray, H: int, W: int, img: np.ndarray) -> np.ndarray:
     labels = np.zeros((H, W))
+    if len(points.shape) <= 1:
+        return labels
     if img is not None:
         img = img / 255.0
         image_copy = np.copy(img)
