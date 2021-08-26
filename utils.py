@@ -582,7 +582,7 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, mask=None) -> dict
             shape of the output would be (Batch_size, 65, Hc, Wc)
     """
     if mask is None:
-        mask = torch.ones((target.shape[2], target.shape[3]))
+        mask = torch.ones_like(target)
     if len(mask.shape) == 3:
         mask = mask.unsqueeze(1)
     if len(target.shape) == 3:
@@ -599,7 +599,7 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, mask=None) -> dict
     entropy_loss = CE_loss(output, labels3D.to('cuda'))
     mask3D = labels2Dto3D(mask, cell_size=8, add_dustbin=False).float()
     mask3D = torch.prod(mask3D, dim=1).to('cuda')
-    loss = (entropy_loss * mask3D).sum() / (mask3D.sum() + 1e-10) / target.shape[0]
+    loss = ((entropy_loss * mask3D).sum() / (mask3D.sum() + 1e-10)) / target.shape[0]
     # add a small number to avoid division by zero
     return {'loss': loss, 'iou': iou}
 
