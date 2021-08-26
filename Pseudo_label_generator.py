@@ -30,12 +30,13 @@ split = "Train" if args.split == 'train' else "Validation"
 batch_size = config['model']['batch_size']
 numHomIter = config['data']['augmentation']['homographic']['num']
 det_threshold = config['model']['detection_threshold']  # detection threshold to threshold the detector heatmap
+size = config['data']['preprocessing']['resize']  # width, height
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=True)
 Net = SuperPointNet()
 Net = load_model(config['pretrained'], Net)
 if torch.cuda.is_available():
     Net.cuda()
-summary(Net, (1, 320, 240), batch_size=1)  # shows the trained network architecture
+summary(Net, (1, size[1], size[0]), batch_size=1)  # shows the trained network architecture
 if config['data']['generate_label']:
     label_path = config['data']['label_path']
     if not os.path.isdir(label_path):
@@ -58,13 +59,13 @@ if config['data']['generate_label']:
                 semi_warped = flattenDetection(semi_warped)
                 semi_warped[semi_warped >= det_threshold] = 1  # threshold the heatmap based on the det_threshold
                 semi_warped[semi_warped < det_threshold] = 0
-                warped_label = np.zeros((numHomIter + 1, 432, 640), dtype=np.int8)  # store the homographic detections
+                warped_label = np.zeros((numHomIter + 1, size[1], size[0]), dtype=np.int8)  # store the homographic detections
                 # for averaging the response
                 for j in range(numHomIter):
                     pts = np.nonzero(semi_warped[j, :, :].to('cpu').numpy().squeeze())
                     pts = np.asarray(list(zip(pts[0], pts[1])))
-                    warped_pts = warpLabels(pts, sample['inv_homography'][batch, j, :, :], 432, 640)
-                    warped_label[j, :, :] = points_to_2D(warped_pts, 432, 640, img=None)
+                    warped_pts = warpLabels(pts, sample['inv_homography'][batch, j, :, :], size[1], size[0])
+                    warped_label[j, :, :] = points_to_2D(warped_pts, size[1], size[0], img=None)
                     # fig, axes = plt.subplots(1, 2)
                     # axes[0].imshow(warped_label[j, :, :] * 255, cmap='gray')
                     # axes[1].imshow(semi_warped.to('cpu').numpy().squeeze()[j, :, :], cmap='gray')
@@ -79,6 +80,7 @@ if config['data']['generate_label']:
                 # (array(y axis coordinates), array(x axis coordinates))
                 filename = os.path.join(label_path, split, sample['name'][batch][:-4])
                 np.save(filename, pts)
-                # plt.imshow(label, cmap='gray')
+                # plt.imshow(points_to_2D(np.asarray(pts), H=size[1], W=size[0],
+                #                         img=sample['image'][batch, :, :].to('cpu').numpy().squeeze() * 255), cmap='gray')
                 # plt.show()
 

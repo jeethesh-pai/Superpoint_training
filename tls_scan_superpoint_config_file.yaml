@@ -13,7 +13,7 @@ data:
             GaussianBlur: {sigma: 0.2}
     cache_in_memory: false
     preprocessing:
-        resize: [640, 432]  # width, height
+        resize: [320, 216]  # width, height
         # resize: [480, 640]
     augmentation:
         photometric:
@@ -32,7 +32,7 @@ data:
                 motion_blur: {max_kernel_size: 3}
         homographic:
             enable: true
-            num: 3 # 100
+            num: 10 # 100
             aggregation: 'sum'
             filter_counts: 0
             homographies:
