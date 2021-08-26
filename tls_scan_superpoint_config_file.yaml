@@ -32,7 +32,7 @@ data:
                 motion_blur: {max_kernel_size: 3}
         homographic:
             enable: true
-            num: 10 # 100
+            num: 15 # 100
             aggregation: 'sum'
             filter_counts: 0
             homographies:

@@ -64,6 +64,9 @@ if config['data']['generate_label']:
                 for j in range(numHomIter):
                     pts = np.nonzero(semi_warped[j, :, :].to('cpu').numpy().squeeze())
                     pts = np.asarray(list(zip(pts[0], pts[1])))
+                    if pts.shape[0] == 0:
+                        warped_label[j, :, :] = np.zeros((size[1], size[0]), dtype=np.int8)
+                        continue
                     warped_pts = warpLabels(pts, sample['inv_homography'][batch, j, :, :], size[1], size[0])
                     warped_label[j, :, :] = points_to_2D(warped_pts, size[1], size[0], img=None)
                     # fig, axes = plt.subplots(1, 2)
