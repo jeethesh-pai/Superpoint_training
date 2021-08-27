@@ -574,7 +574,24 @@ def denormPts(pts, shape):
     return pts
 
 
-def detector_loss(target: torch.Tensor, output: torch.Tensor, mask=None) -> dict:
+def m_iou(target: torch.Tensor, output: torch.Tensor, det_threshold: float) -> float:
+    with torch.no_grad():
+        Softmax = torch.nn.Softmax(dim=1)
+        soft_output = Softmax(output)
+        soft_output[soft_output >= det_threshold] = 1
+        soft_output[soft_output < det_threshold] = 0
+        soft_output = soft_output[:, :-1, :, :]  # cancel out the dustbin after taking softmax
+        assert target.shape == soft_output.shape
+        # iou = intersection / union
+        intersection = torch.mul(target, soft_output)
+        union = torch.add(target, soft_output)
+        union[union == 2] = 1
+        batch_iou = torch.mean(torch.div(torch.sum(intersection, dim=(1, 2, 3)), torch.sum(union, dim=(1, 2, 3))))
+        return batch_iou.item()
+
+
+
+def detector_loss(target: torch.Tensor, output: torch.Tensor, det_threshold: float, mask=None) -> dict:
     """
     returns detector loss based on softmax activation as given in De Tone Paper.
     target: target label (Shape should be (Batch_size, 1, Hc * cell_size, Wc * cell_size)
@@ -588,20 +605,18 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, mask=None) -> dict
     if len(target.shape) == 3:
         target = target.unsqueeze(1)
     labels3D = labels2Dto3D(target, 8, add_dustbin=True)
-    with torch.no_grad():
-        labels3D[labels3D == 2] = 1
-        Softmax = torch.nn.Softmax(dim=1)
-        softmax_output = Softmax(output)
-        iou = torchmetrics.functional.iou(softmax_output, labels3D.to(torch.int), threshold=0.015)
+    labels3D[labels3D == 2] = 1
+    iou = m_iou(labels2Dto3D(target, 8, add_dustbin=False), output, det_threshold=det_threshold)
     labels3D = torch.argmax(labels3D, dim=1)
     # dustbin is true because of softmax activation in output
     CE_loss = torch.nn.CrossEntropyLoss(reduction='none')
     entropy_loss = CE_loss(output, labels3D.to('cuda'))
     mask3D = labels2Dto3D(mask, cell_size=8, add_dustbin=False).float()
     mask3D = torch.prod(mask3D, dim=1).to('cuda')
-    loss = ((entropy_loss * mask3D).sum() / (mask3D.sum() + 1e-10)) / target.shape[0]
+    loss = torch.divide(torch.sum(entropy_loss * mask3D, dim=(1, 2)), torch.sum(mask3D + 1e-10, dim=(1, 2)))
+    batch_mean_loss = torch.mean(loss)
     # add a small number to avoid division by zero
-    return {'loss': loss, 'iou': iou}
+    return {'loss': batch_mean_loss, 'iou': iou}
 
 
 def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,

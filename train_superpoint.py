@@ -36,9 +36,11 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
     writer.add_graph(Net, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).cuda())
     max_iter = config['train_iter']  # also called as epochs
     n_iter = 0
+    prev_val_loss = 0
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
         running_loss, batch_iou = 0, 0
-        for i, sample in enumerate(tqdm.tqdm(train_loader)):  # make sure the homographic adaptation is false here
+        train_bar = tqdm.tqdm(train_loader)
+        for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is false here
             # fig, axes = plt.subplots(1, 2)
             # axes[0].imshow(sample['image'].numpy()[0, :, :].squeeze(), cmap='gray')
             # axes[1].imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
@@ -49,7 +51,7 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
             optimizer.zero_grad()
             out = Net(sample['image'])
             semi, _ = out['semi'], out['desc']
-            det_out = detector_loss(sample['label'], semi)
+            det_out = detector_loss(sample['label'], semi, det_threshold=det_threshold)
             loss, iou = det_out['loss'], det_out['iou']
             if batch_iou == 0:
                 batch_iou = iou
@@ -58,7 +60,38 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
             running_loss += loss.item()
             loss.backward()
             optimizer.step()
+            train_bar.set_description(f"Epoch- {n_iter + 1} Loss: {running_loss / (i + 1)}, IoU: {batch_iou}")
+        running_val_loss, val_batch_iou = 0, 0
         print(f"Epoch {n_iter + 1}:  Loss: {running_loss / len(train_loader)}, IoU: {batch_iou}")
+        val_bar = tqdm.tqdm(val_loader)
+        for j, val_sample in enumerate(val_bar):
+            if torch.cuda.is_available():
+                val_sample['image'] = val_sample['image'].to('cuda')
+                val_sample['label'] = val_sample['label'].to('cuda')
+            with torch.no_grad():
+                val_out = Net(val_sample['image'])
+                val_det_out = detector_loss(val_sample['label'], val_out['semi'], det_threshold)
+                running_val_loss += val_det_out['loss'].item()
+                if val_batch_iou == 0:
+                    val_batch_iou = val_det_out['iou']
+                else:
+                    val_batch_iou = (val_batch_iou + val_det_out['iou']) / 2
+            val_bar.set_description(f"Epoch- {n_iter + 1} Validation loss: {running_val_loss / j}, "
+                                    f"Validation IoU: {val_batch_iou}")
+        running_val_loss /= len(val_loader)
+        if prev_val_loss == 0:
+            prev_val_loss = running_val_loss
+            torch.save(Net, "saved_path/detector_training/best_model.pt")
+        if prev_val_loss > running_val_loss:
+            torch.save(Net, "saved_path/detector_training/best_model.pt")
+            prev_val_loss = running_val_loss
+        print(f"Epoch {n_iter + 1}:  val_loss: {running_val_loss}, val_IoU: {val_batch_iou}")
+        writer.add_scalar('Loss', running_loss, n_iter + 1)
+        writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
+        writer.add_scalar('IoU', batch_iou, n_iter + 1)
+        writer.add_scalar('Val_IoU', val_batch_iou, n_iter + 1)
+        writer.flush()
+        n_iter += 1
         #        (_, loss), (_, iou) = Net.train_mode(sample).items()
         #         loss.backward()
         #         if count == 0:
