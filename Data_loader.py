@@ -67,7 +67,7 @@ class TLSScanData(Dataset):
             points = np.load(os.path.join(self.label_path, self.image_list[index][:-3] + 'npy'))
             # points_y, points_x = point_erode(points)
             # points = np.asarray(list(zip(points_y, points_x)))
-            points_2D = points_to_2D(points, height, width, img=None)
+            points_2D = points_to_2D(points, height, width, img=image)
             points_2D = torch.tensor(points_2D, dtype=torch.float32).unsqueeze(0)
             sample['label'] = points_2D
         if self.photometric:  # in photometric augmentations labels are unaffected

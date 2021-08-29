@@ -12,8 +12,16 @@ import matplotlib.pyplot as plt
 import tqdm
 import warnings
 warnings.simplefilter("ignore")
+import argparse
 
-config_file_path = '../my_superpoint_pytorch/tls_scan_superpoint_config_file.yaml'
+
+parser = argparse.ArgumentParser(description="This scripts helps to train Superpoint for detector training after"
+                                             "Homographic adaptation labels are made as mentioned in the paper")
+parser.add_argument('--config', help='Path to config file',
+                    default="my_superpoint_pytorch/detector_training.yaml")
+args = parser.parse_args()
+
+config_file_path = args.config
 with open(config_file_path) as path:
     config = yaml.load(path)
 batch_size = config['model']['batch_size']
@@ -60,9 +68,8 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
             running_loss += loss.item()
             loss.backward()
             optimizer.step()
-            train_bar.set_description(f"Epoch- {n_iter + 1} Loss: {running_loss / (i + 1)}, IoU: {batch_iou}")
+            train_bar.set_description(f"Training Epoch -- {n_iter + 1} Loss: {running_loss / (i + 1)}, IoU: {batch_iou}")
         running_val_loss, val_batch_iou = 0, 0
-        print(f"Epoch {n_iter + 1}:  Loss: {running_loss / len(train_loader)}, IoU: {batch_iou}")
         val_bar = tqdm.tqdm(val_loader)
         for j, val_sample in enumerate(val_bar):
             if torch.cuda.is_available():
@@ -76,7 +83,7 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
                     val_batch_iou = val_det_out['iou']
                 else:
                     val_batch_iou = (val_batch_iou + val_det_out['iou']) / 2
-            val_bar.set_description(f"Epoch- {n_iter + 1} Validation loss: {running_val_loss / j}, "
+            val_bar.set_description(f"Validation -- Epoch- {n_iter + 1} Validation loss: {running_val_loss / (j + 1)}, "
                                     f"Validation IoU: {val_batch_iou}")
         running_val_loss /= len(val_loader)
         if prev_val_loss == 0:

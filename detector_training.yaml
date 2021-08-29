@@ -1,11 +1,11 @@
 data:
     dataset: 'TLSScanData'
-    generate_label: true
-    labels: false
+    generate_label: false
+    labels: true
     label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'
     # labels: "logs/magicpoint_tls_labels/predictions"
     root: '../pytorch-superpoint/datasets/TLS_Train' # datasets/COCO
-    detector_training: false
+    detector_training: true
     gaussian_label:
         enable: true
         sigma: 1.0
@@ -17,7 +17,7 @@ data:
         # resize: [480, 640]
     augmentation:
         photometric:
-            enable: false
+            enable: true
             primitives: [
                 'random_brightness', 'random_contrast', 'additive_speckle_noise',
                 'additive_gaussian_noise', 'additive_shade', 'motion_blur']
@@ -31,7 +31,7 @@ data:
                     kernel_size_range: [100, 150]
                 motion_blur: {max_kernel_size: 3}
         homographic:
-            enable: true
+            enable: false
             num: 15 # 100
             aggregation: 'sum'
             filter_counts: 0
@@ -63,9 +63,9 @@ model:
     }
     detector_loss:
         loss_type: 'softmax'
-    batch_size: 1 # 32
-    eval_batch_size: 1 # 32
-    learning_rate: 0.0001 # 0.0001
+    batch_size: 8 # 32
+    eval_batch_size: 4 # 32
+    learning_rate: 0.001 # 0.0001
     detection_threshold: 0.015 # 0.015
     lambda_loss: 1 # 1
     nms: 4
