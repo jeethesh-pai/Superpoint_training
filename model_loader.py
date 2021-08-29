@@ -117,7 +117,45 @@ class SuperPointNet(torch.nn.Module):
                 desc = torch.nn.functional.grid_sample(desc, samp_pts)
                 desc = desc.data.cpu().numpy().reshape(D, -1)
                 desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]
-            return pts, desc, heatmap
+        return pts, desc, heatmap
+
+
+def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=4, ret_heatmap=False,
+                             limit_detection=1000) -> np.ndarray:
+    """
+    :param semi - Output prediction from SuperpointNet with shape (65, Hc, Wc) - takes only one image at once
+    :param conf_threshold - Detector confidence threshold to be applied
+    :param NMS_dist - Correct distance used for Non maximal suppression
+    :param ret_heatmap - returns heatmap with size (Hc x 8, Wc x 8)
+    :param limit_detection - total no. of detection which needs to be considered utmost.
+    """
+    assert len(semi.squeeze().shape) == 3
+    with torch.no_grad():
+        SoftMax = torch.nn.Softmax(dim=0)  # apply softmax on the channel dimension with 65
+        soft_output = SoftMax(semi.squeeze())
+        soft_output = soft_output[:-1, :, :]
+        pixel_shuffle = torch.nn.PixelShuffle(upscale_factor=8)
+        heatmap = pixel_shuffle(soft_output).to('cpu').numpy().squeeze()
+        if ret_heatmap:
+            return heatmap
+        xs, ys = np.where(heatmap >= conf_threshold)  # Confidence threshold.
+        if len(xs) == 0:
+            return np.zeros((3, 0))
+        pts = np.zeros((3, len(xs)))  # Populate point data sized 3xN.
+        pts[0, :] = ys
+        pts[1, :] = xs
+        pts[2, :] = heatmap[xs, ys]
+        H, W = heatmap.shape
+        pts, _ = nms_fast(pts, heatmap.shape[0], heatmap.shape[1], dist_thresh=NMS_dist)
+        inds = np.argsort(pts[2, :])
+        pts = pts[:, inds[::-1]]  # Sort by confidence.
+        # Remove points along border.
+        bord = 4  # we consider 4 pixels from all the boundaries as rejected
+        toremoveW = np.logical_or(pts[0, :] < bord, pts[0, :] >= (W - bord))
+        toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
+        toremove = np.logical_or(toremoveW, toremoveH)
+        pts = pts[:, ~toremove]
+    return pts
 
 
 def load_model(checkpoint_path: str, model: torch.nn.Module):

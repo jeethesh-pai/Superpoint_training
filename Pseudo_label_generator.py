@@ -1,8 +1,8 @@
 import torch
 import yaml
 from Data_loader import TLSScanData, points_to_2D
-from model_loader import SuperPointNet, load_model
-from utils import flattenDetection, warpLabels
+from model_loader import SuperPointNet, load_model, detector_post_processing
+from utils import flattenDetection, warpLabels, get_grid, filter_points, warp_image, nms_fast
 from torchsummary import summary
 import os
 import numpy as np
@@ -41,49 +41,47 @@ if config['data']['generate_label']:
     label_path = config['data']['label_path']
     if not os.path.isdir(label_path):
         os.mkdir(label_path)
-    for sample in tqdm.tqdm(data_loader):
+    tqdm_bar = tqdm.tqdm(data_loader)
+    for sample in tqdm_bar:
+        tqdm_bar.set_description(f"{args.split} Labels being created...")
         if torch.cuda.is_available():
             sample['image'] = sample['image'].to('cuda')
-            sample['warped_image'] = sample['warped_image'].to('cuda')
+            sample['warped_image'] = sample['warped_image'].to('cuda').squeeze()  # squeeze the batch dimension as its 1
+        # to store the homographic detections for averaging the response
+        label = np.zeros((batch_size + numHomIter, size[1], size[0]), dtype=np.float32)
         with torch.no_grad():
             output = Net(sample['image'])
             semi, _ = output['semi'], output['desc']
-            semi = flattenDetection(semi)
-            semi[semi >= det_threshold] = 1
-            semi[semi < det_threshold] = 0
-            for batch in range(batch_size):
-                warped_image = sample['warped_image'][batch, :, :, :].unsqueeze(1)  # introduce the numHomIter as
-                # batch size for prediction
-                output_warped = Net(warped_image)
-                semi_warped, _ = output_warped['semi'], output_warped['desc']
-                semi_warped = flattenDetection(semi_warped)
-                semi_warped[semi_warped >= det_threshold] = 1  # threshold the heatmap based on the det_threshold
-                semi_warped[semi_warped < det_threshold] = 0
-                warped_label = np.zeros((numHomIter + 1, size[1], size[0]), dtype=np.int8)  # store the homographic detections
-                # for averaging the response
-                for j in range(numHomIter):
-                    pts = np.nonzero(semi_warped[j, :, :].to('cpu').numpy().squeeze())
-                    pts = np.asarray(list(zip(pts[0], pts[1])))
-                    if len(pts.shape) == 1:
-                        warped_label[j, :, :] = np.zeros((size[1], size[0]), dtype=np.int8)
-                    else:
-                        warped_pts = warpLabels(pts, sample['inv_homography'][batch, j, :, :], size[1], size[0])
-                        warped_label[j, :, :] = points_to_2D(warped_pts, size[1], size[0], img=None)
-                    # fig, axes = plt.subplots(1, 2)
-                    # axes[0].imshow(warped_label[j, :, :] * 255, cmap='gray')
-                    # axes[1].imshow(semi_warped.to('cpu').numpy().squeeze()[j, :, :], cmap='gray')
-                    # plt.show()
-                # saving the non homographic detection also
-                warped_label[j, :, :] = semi[batch, :, :, :].to('cpu').numpy().squeeze()
-                label = np.mean(warped_label, axis=0)
-                label[label >= 0.5] = 1
-                label[label > 0.5] = 0
-                pts = np.nonzero(label)
-                pts = list(zip(pts[0], pts[1]))  # saves points in the form pts =
-                # (array(y axis coordinates), array(x axis coordinates))
-                filename = os.path.join(label_path, split, sample['name'][batch][:-4])
-                np.save(filename, pts)
-                # plt.imshow(points_to_2D(np.asarray(pts), H=size[1], W=size[0],
-                #                         img=sample['image'][batch, :, :].to('cpu').numpy().squeeze() * 255), cmap='gray')
-                # plt.show()
+            label[-1, :, :] = detector_post_processing(semi, ret_heatmap=True)
+            warped_image = sample['warped_image'].unsqueeze(1)  # introduce the numHomIter as
+            # batch size for prediction
+            output_warped = Net(warped_image)
+            semi_warped, _ = output_warped['semi'], output_warped['desc']
+            for n in range(numHomIter):
+                pts = detector_post_processing(semi_warped[n, :, :, :])
+                temp_heatmap = detector_post_processing(semi_warped[n, :, :, :], ret_heatmap=True)
+                label[n, :, :] = warp_image(temp_heatmap, sample['homography'][0, n, :, :]).squeeze()
+            label = np.mean(label, axis=0)  # average the heatmap over the no. of images.
+            xs, ys = np.where(label >= config['model']['detection_threshold'])  # Confidence threshold.
+            pts = np.zeros((3, len(xs)))  # Populate point data sized 3xN.
+            pts[0, :] = ys
+            pts[1, :] = xs
+            pts[2, :] = label[xs, ys]
+            H, W = label.shape
+            pts, _ = nms_fast(pts, label.shape[0], label.shape[1], dist_thresh=4)
+            inds = np.argsort(pts[2, :])
+            pts = pts[:, inds[::-1]].astype(np.int16)  # Sort by confidence.
+            # Remove points along border.
+            bord = 4  # we consider 4 pixels from all the boundaries as rejected
+            toremoveW = np.logical_or(pts[0, :] < bord, pts[0, :] >= (W - bord))
+            toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
+            toremove = np.logical_or(toremoveW, toremoveH)
+            pts = pts[:, ~toremove]
+            pts = list(zip(pts[1], pts[0]))  # saves points in the form pts =
+            # (array(y axis coordinates), array(x axis coordinates))
+            filename = os.path.join(label_path, split, sample['name'][0][:-4])
+            # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W, img=sample['image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
+            # plt.show()
+            np.save(filename, pts)
+            print(pts)
 

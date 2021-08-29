@@ -269,11 +269,13 @@ def homography_scaling_torch(homography, H, W):
     return homography
 
 
-def filter_points(points, shape):
+def filter_points(points, shape, indicesTrue=False):
     #  check!
     x_warp, y_warp = points[:, 0].astype(np.int64), points[:, 1].astype(np.int64)
     indices = np.where((x_warp >= 0) & (x_warp < shape[0]) & (y_warp >= 0) & (y_warp < shape[1]))
     points_warp = np.asarray(list(zip(y_warp[indices[0]], x_warp[indices[0]])))
+    if indicesTrue:
+        return indices
     return points_warp
 
 
