@@ -11,14 +11,14 @@ from torch.utils.tensorboard import SummaryWriter
 import matplotlib.pyplot as plt
 import tqdm
 import warnings
-warnings.simplefilter("ignore")
 import argparse
+warnings.simplefilter("ignore")
 
 
 parser = argparse.ArgumentParser(description="This scripts helps to train Superpoint for detector training after"
                                              "Homographic adaptation labels are made as mentioned in the paper")
 parser.add_argument('--config', help='Path to config file',
-                    default="my_superpoint_pytorch/detector_training.yaml")
+                    default="detector_training.yaml")
 args = parser.parse_args()
 
 config_file_path = args.config
@@ -61,7 +61,7 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
             semi, _ = out['semi'], out['desc']
             det_out = detector_loss(sample['label'], semi, det_threshold=det_threshold)
             loss, iou = det_out['loss'], det_out['iou']
-            if batch_iou == 0:
+            if i == 0:
                 batch_iou = iou
             else:
                 batch_iou = (batch_iou + iou) / 2
@@ -88,9 +88,11 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         running_val_loss /= len(val_loader)
         if prev_val_loss == 0:
             prev_val_loss = running_val_loss
+            print('saving best model .... ')
             torch.save(Net, "saved_path/detector_training/best_model.pt")
         if prev_val_loss > running_val_loss:
             torch.save(Net, "saved_path/detector_training/best_model.pt")
+            print('saving best model .... ')
             prev_val_loss = running_val_loss
         print(f"Epoch {n_iter + 1}:  val_loss: {running_val_loss}, val_IoU: {val_batch_iou}")
         writer.add_scalar('Loss', running_loss, n_iter + 1)

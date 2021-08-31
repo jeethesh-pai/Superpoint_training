@@ -135,10 +135,12 @@ def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
 
 image_dir = "../pytorch-superpoint/datasets/TLS_Train/Test/"
 Net = SuperPointNet()
-checkpoint_path = "saved_path/best_model.pt"
+checkpoint_path = "superpoint_v1.pth"
+# checkpoint_path = "colab_log/detector_training_pt2.pt"
 Net = load_model(checkpoint_path, Net)
-image1 = image_dir + "rgb_syn_library_z1.jpg"
-image2 = image_dir + "IMG_2035.JPG"
+Net = Net.to('cuda')
+image1 = image_dir + "IMG_2042.JPG"
+image2 = image_dir + "rgb_syn_library_0.jpg"
 # desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
 combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.7, size=(856, 576))
 plt.imshow(combined)

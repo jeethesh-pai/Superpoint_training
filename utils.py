@@ -390,37 +390,6 @@ def flattenDetection(semi):
     return heatmap
 
 
-def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
-    """
-    :param self:
-    :param heatmap:
-        np (H, W)
-    :return:
-    """
-
-    border_remove = 4
-
-    H, W = heatmap.shape[0], heatmap.shape[1]
-    xs, ys = np.where(heatmap >= conf_thresh)  # Confidence threshold.
-    sparsemap = (heatmap >= conf_thresh)
-    if len(xs) == 0:
-        return np.zeros((3, 0))
-    pts = np.zeros((3, len(xs)))  # Populate point data sized 3xN.
-    pts[0, :] = ys
-    pts[1, :] = xs
-    pts[2, :] = heatmap[xs, ys]
-    pts, _ = nms_fast(pts, H, W, dist_thresh=nms_dist)  # Apply NMS.
-    inds = np.argsort(pts[2, :])
-    pts = pts[:, inds[::-1]]  # Sort by confidence.
-    # Remove points along border.
-    bord = border_remove
-    toremoveW = np.logical_or(pts[0, :] < bord, pts[0, :] >= (W - bord))
-    toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
-    toremove = np.logical_or(toremoveW, toremoveH)
-    pts = pts[:, ~toremove]
-    return pts
-
-
 def box_nms(prob, size, iou=0.1, min_prob=0.01, keep_top_k=0):
     # requires https://github.com/open-mmlab/mmdetection. 
     # Warning : BUILD FROM SOURCE using command MMCV_WITH_OPS=1 pip install -e
@@ -576,6 +545,37 @@ def denormPts(pts, shape):
     return pts
 
 
+def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
+    """
+    :param nms_dist: distance to be applied for non maximal suppression
+    :param heatmap:
+        np (H, W)
+    :param conf_thresh: threshold for detection
+    :return:
+    """
+
+    border_remove = 4
+    H, W = heatmap.shape[0], heatmap.shape[1]
+    xs, ys = np.where(heatmap >= conf_thresh)  # Confidence threshold.
+    sparsemap = (heatmap >= conf_thresh)
+    if len(xs) == 0:
+        return np.zeros((3, 0))
+    pts = np.zeros((3, len(xs)))  # Populate point data sized 3xN.
+    pts[0, :] = ys
+    pts[1, :] = xs
+    pts[2, :] = heatmap[xs, ys]
+    pts, _ = nms_fast(pts, H, W, dist_thresh=nms_dist)  # Apply NMS.
+    inds = np.argsort(pts[2, :])
+    pts = pts[:, inds[::-1]]  # Sort by confidence.
+    # Remove points along border.
+    bord = border_remove
+    toremoveW = np.logical_or(pts[0, :] < bord, pts[0, :] >= (W - bord))
+    toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
+    toremove = np.logical_or(toremoveW, toremoveH)
+    pts = pts[:, ~toremove]
+    return pts
+
+
 def m_iou(target: torch.Tensor, output: torch.Tensor, det_threshold: float) -> float:
     with torch.no_grad():
         Softmax = torch.nn.Softmax(dim=1)
@@ -607,7 +607,6 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, det_threshold: flo
     if len(target.shape) == 3:
         target = target.unsqueeze(1)
     labels3D = labels2Dto3D(target, 8, add_dustbin=True)
-    labels3D[labels3D == 2] = 1
     iou = m_iou(labels2Dto3D(target, 8, add_dustbin=False), output, det_threshold=det_threshold)
     labels3D = torch.argmax(labels3D, dim=1)
     # dustbin is true because of softmax activation in output

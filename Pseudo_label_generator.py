@@ -68,7 +68,7 @@ if config['data']['generate_label']:
             pts[1, :] = xs
             pts[2, :] = label[xs, ys]
             H, W = label.shape
-            pts, _ = nms_fast(pts, label.shape[0], label.shape[1], dist_thresh=4)
+            pts, _ = nms_fast(pts, label.shape[0], label.shape[1], dist_thresh=1)
             inds = np.argsort(pts[2, :])
             pts = pts[:, inds[::-1]].astype(np.int16)  # Sort by confidence.
             # Remove points along border.

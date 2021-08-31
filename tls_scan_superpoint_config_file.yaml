@@ -2,9 +2,9 @@ data:
     dataset: 'TLSScanData'
     generate_label: true
     labels: false
-    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'
+    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'  # /content/drive/MyDrive/Label
     # labels: "logs/magicpoint_tls_labels/predictions"
-    root: '../pytorch-superpoint/datasets/TLS_Train' # datasets/COCO
+    root: '../pytorch-superpoint/datasets/TLS_Train' # /content/drive/MyDrive
     detector_training: false
     gaussian_label:
         enable: true
@@ -22,7 +22,7 @@ data:
                 'random_brightness', 'random_contrast', 'additive_speckle_noise',
                 'additive_gaussian_noise', 'additive_shade', 'motion_blur']
             params:
-                random_brightness: {max_abs_change: 30}
+                random_brightness: {max_abs_change: 50}
                 random_contrast: {strength_range: [0.5, 1.5]}
                 additive_gaussian_noise: {stddev_range: [0, 10]}
                 additive_speckle_noise: {prob_range: [0, 0.0035]}
@@ -32,18 +32,18 @@ data:
                 motion_blur: {max_kernel_size: 3}
         homographic:
             enable: true
-            num: 15 # 100
+            num: 100 # 100
             aggregation: 'sum'
             filter_counts: 0
             homographies:
                 params:
                     translation: true
                     rotation: true
-                    scaling: false
+                    scaling: true
                     perspective: true
-                    scaling_amplitude: 1
-                    perspective_amplitude_x: 0.3
-                    perspective_amplitude_y: 0.3
+                    scaling_amplitude: 0.2
+                    perspective_amplitude_x: 0.2
+                    perspective_amplitude_y: 0.2
                     allow_artifacts: true
                     patch_ratio: 0.85
                     max_angle: 0.785
