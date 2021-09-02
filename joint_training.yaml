@@ -2,9 +2,9 @@ data:
     dataset: 'TLSScanData'
     generate_label: false
     labels: true
-    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'
+    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'  # /content/drive/MyDrive/Label
     # labels: "logs/magicpoint_tls_labels/predictions"
-    root: '../pytorch-superpoint/datasets/TLS_Train' # datasets/COCO
+    root: '../pytorch-superpoint/datasets/TLS_Train' # # /content/drive/MyDrive
     detector_training: false # descriptor training if false
     gaussian_label:
         enable: true

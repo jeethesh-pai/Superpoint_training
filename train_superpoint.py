@@ -103,36 +103,6 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         writer.add_scalar('Val_IoU', val_batch_iou, n_iter + 1)
         writer.flush()
         n_iter += 1
-        #        (_, loss), (_, iou) = Net.train_mode(sample).items()
-        #         loss.backward()
-        #         if count == 0:
-        #             batch_iou = iou
-        #         batch_iou = torch.add(batch_iou, iou) / 2
-        #         running_loss += loss.item()
-        #         optimizer.step()
-        #     print(f'Training Loss for the epoch-{n_iter}: {running_loss / len(train_loader)}, IoU: {batch_iou}')
-        #     val_loss, val_iou = 0, 0
-        #     for count_val, sample_val in tqdm.tqdm(enumerate(val_loader)):
-        #         with torch.no_grad():
-        #             (_, curr_loss), (_, curr_iou) = Net.train_mode(sample_val).items()
-        #             val_loss += curr_loss
-        #             if count_val == 0:
-        #                 val_iou = curr_iou
-        #             val_iou = (val_iou + curr_iou) / 2
-        #     if n_iter == 0:
-        #         prev_val_loss = val_loss
-        #         torch.save(Net, "saved_path/best_model.pt")
-        #     if val_loss < prev_val_loss and n_iter > 0:
-        #         print('saving best model...')
-        #         torch.save(Net, "saved_path/best_model.pt")
-        #     print(f'Val Loss for the epoch-{n_iter}: {val_loss / len(val_loader)}, Val_IoU: {val_iou}')
-        #     writer.add_scalar('Loss', running_loss, n_iter + 1)
-        #     writer.add_scalar('Val_loss', val_loss, n_iter + 1)
-        #     writer.add_scalar('IoU', batch_iou, n_iter + 1)
-        #     writer.add_scalar('Val_IoU', val_iou, n_iter + 1)
-        #     writer.flush()
-        #     n_iter += 1
-        # writer.close()
 else:  # start descriptor training with the homographically adapted model
     writer = SummaryWriter(log_dir="logs/descriptor_training")
     writer.add_graph(Net, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).cuda())
@@ -142,14 +112,14 @@ else:  # start descriptor training with the homographically adapted model
     prev_val_loss = 0
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
         running_loss, batch_iou = 0, 0
-        train_bar = tqdm.tqdm(val_loader)
+        train_bar = tqdm.tqdm(train_loader)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is set to true here
-            fig, axes = plt.subplots(2, 2)
-            axes[0, 0].imshow(sample['image'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
-            axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            plt.show()
+            # fig, axes = plt.subplots(2, 2)
+            # axes[0, 0].imshow(sample['image'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
+            # axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # plt.show()
             if torch.cuda.is_available():
                 sample['image'] = sample['image'].to('cuda')
                 sample['label'] = sample['label'].to('cuda')
