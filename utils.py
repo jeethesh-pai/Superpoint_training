@@ -576,22 +576,22 @@ def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
     return pts
 
 
+@torch.no_grad()
 def m_iou(target: torch.Tensor, output: torch.Tensor, det_threshold: float) -> float:
-    with torch.no_grad():
-        Softmax = torch.nn.Softmax(dim=1)
-        soft_output = Softmax(output)
-        soft_output[soft_output >= det_threshold] = 1
-        soft_output[soft_output < det_threshold] = 0
-        soft_output = soft_output[:, :-1, :, :]  # cancel out the dustbin after taking softmax
-        # iou = intersection / union
-        intersection = torch.mul(target, soft_output)
-        union = torch.add(target, soft_output)
-        union[union == 2] = 1
-        batch_iou = torch.mean(torch.div(torch.sum(intersection, dim=(1, 2, 3)), torch.sum(union, dim=(1, 2, 3))))
-        return batch_iou.item()
+    Softmax = torch.nn.Softmax(dim=1)
+    soft_output = Softmax(output)
+    soft_output[soft_output >= det_threshold] = 1
+    soft_output[soft_output < det_threshold] = 0
+    soft_output = soft_output[:, :-1, :, :]  # cancel out the dustbin after taking softmax
+    # iou = intersection / union
+    intersection = torch.mul(target, soft_output)
+    union = torch.add(target, soft_output)
+    union[union == 2] = 1
+    batch_iou = torch.mean(torch.div(torch.sum(intersection, dim=(1, 2, 3)), torch.sum(union, dim=(1, 2, 3))))
+    return batch_iou.item()
 
 
-
+@torch.enable_grad()
 def detector_loss(target: torch.Tensor, output: torch.Tensor, det_threshold: float, mask=None) -> dict:
     """
     returns detector loss based on softmax activation as given in De Tone Paper.
@@ -616,6 +616,7 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, det_threshold: flo
     loss = torch.divide(torch.sum(entropy_loss * mask3D, dim=(1, 2)), torch.sum(mask3D + 1e-10, dim=(1, 2)))
     batch_mean_loss = torch.mean(loss)
     # add a small number to avoid division by zero
+    #  return batch_mean_loss
     return {'loss': batch_mean_loss, 'iou': iou}
 
 

@@ -65,7 +65,7 @@ model:
         loss_type: 'softmax'
     batch_size: 4 # 32
     eval_batch_size: 2 # 32
-    learning_rate: 0.0001 # 0.0001
+    learning_rate: 0.001 # 0.0001
     detection_threshold: 0.015 # 0.015
     lambda_loss: 1 # 1
     nms: 1
@@ -94,7 +94,7 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/colab_log/detector_training_pt1.pt"
+pretrained: "../my_superpoint_pytorch/new_superpoint_v1.pth"
 
 
 
