@@ -583,7 +583,6 @@ def m_iou(target: torch.Tensor, output: torch.Tensor, det_threshold: float) -> f
         soft_output[soft_output >= det_threshold] = 1
         soft_output[soft_output < det_threshold] = 0
         soft_output = soft_output[:, :-1, :, :]  # cancel out the dustbin after taking softmax
-        assert target.shape == soft_output.shape
         # iou = intersection / union
         intersection = torch.mul(target, soft_output)
         union = torch.add(target, soft_output)
@@ -623,36 +622,34 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, det_threshold: flo
 def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,
                       lambda_d: float, margin_pos: float, margin_neg: float, threshold=8, valid_mask=None) -> \
         torch.Tensor:
-    batch_size, Hc, Wc = descriptor_warped.shape[0], descriptor_warped.shape[2], descriptor_warped.shape[3]
+    batch_size, size, Hc, Wc = descriptor_warped.shape
     H, W = Hc * 8, Wc * 8
     valid_mask = torch.ones(size=(H, W)) if valid_mask is None else valid_mask
     if len(valid_mask.shape) == 3:
         valid_mask = valid_mask.unsqueeze(1)
     coords = get_grid(Hc, Wc, homogenous=False)  # coordinates of Hc, Wc  grid
     coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
-    warped_coord = warpLabels(coords.transpose(1, 0), homography, H, W, filterTrue=False)
+    coords = coords.transpose(1, 0)
+    warped_coord = warpLabels(coords, homography, H, W, filterTrue=False).reshape([batch_size, Hc, Wc, 1, 1, 2])
+    coords = np.repeat(coords[np.newaxis, ...], batch_size, axis=0).reshape([batch_size, 1, 1, Hc, Wc, 2])
     mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False).float()
     mask3D = torch.prod(mask3D, dim=1).to('cuda')
-    loss = []
-    for i in range(batch_size):  # batch_size here refer to the numHomoIter
-        cell_dist = coords.reshape(-1, 2) - warped_coord[i, :, :]
-        cell_dist = np.linalg.norm(cell_dist, axis=-1)
-        mask = cell_dist <= threshold
-        mask = mask.astype(np.float32)
-        mask = torch.Tensor(mask.reshape(Hc, Wc)).to('cuda')
-        desc_product = descriptor * descriptor_warped[i, :, :, :]
-        desc_product_sum = desc_product.sum(dim=0)
-        positive_corr = torch.max(margin_pos * torch.ones_like(desc_product_sum) - desc_product_sum,
-                                  torch.zeros_like(desc_product_sum))
-        negative_corr = torch.max(desc_product_sum - margin_neg * torch.ones_like(desc_product_sum),
-                                  torch.zeros_like(desc_product_sum))
-        loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr) * mask3D[i, :, :]
-        loss.append(loss_desc.sum() / mask3D.sum())
-    return sum(loss) / batch_size
+    cell_dist = np.linalg.norm(coords - warped_coord, axis=-1)
+    mask = cell_dist <= threshold
+    mask = torch.from_numpy(mask.astype(np.float32)).reshape([batch_size, Hc * Wc, Hc * Wc]).to('cuda')
+    new_desc = descriptor.reshape((batch_size, -1, size))
+    new_warp_descriptor = descriptor_warped.reshape((batch_size, -1, size))
+    desc_product = torch.matmul(new_desc, new_warp_descriptor.transpose(2, 1))
+    positive_corr = torch.max(margin_pos * torch.ones_like(desc_product) - desc_product,
+                              torch.zeros_like(desc_product))
+    negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
+                              torch.zeros_like(desc_product))
+    loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr) * mask3D.reshape([batch_size, 1, -1])
+    return loss_desc.sum() / (mask3D.sum() * batch_size)
 
 
-def descriptor_loss(descriptors, descriptors_warped, homographies, mask_valid=None,
-                    cell_size=8, lamda_d=250, device='cpu', descriptor_dist=4, **config):
+def descriptor_loss(descriptors, descriptors_warped, homographies, mask_valid=None, cell_size=8, lamda_d=250,
+                    device='cpu', descriptor_dist=4, **config):
     """
     Compute descriptor loss from descriptors_warped and given homographies
 

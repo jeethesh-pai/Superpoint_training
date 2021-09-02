@@ -80,7 +80,7 @@ if config['data']['generate_label']:
             pts = list(zip(pts[1], pts[0]))  # saves points in the form pts =
             # (array(y axis coordinates), array(x axis coordinates))
             filename = os.path.join(label_path, split, sample['name'][0][:-4])
-            # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W, img=sample['image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
-            # plt.show()
+            plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W, img=sample['image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
+            plt.show()
             np.save(filename, pts)
 

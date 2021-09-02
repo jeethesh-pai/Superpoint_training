@@ -18,7 +18,7 @@ for key in keys:
     c_weight = colab_weights[key].to('cpu')
     r_weight = remote_weights[key].to('cpu')
     diff1 = torch.subtract(p_weight, c_weight).sum()
-    diff2 = torch.subtract(p_weight, r_weight).sum()
+    diff2 = torch.subtract(c_weight, r_weight).sum()
     print(f"{key}:{diff1}, {diff2}")
 
 

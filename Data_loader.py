@@ -67,7 +67,7 @@ class TLSScanData(Dataset):
             points = np.load(os.path.join(self.label_path, self.image_list[index][:-3] + 'npy'))
             # points_y, points_x = point_erode(points)
             # points = np.asarray(list(zip(points_y, points_x)))
-            points_2D = points_to_2D(points, height, width, img=None)
+            points_2D = points_to_2D(points, height, width, img=image)
             points_2D = torch.tensor(points_2D, dtype=torch.float32).unsqueeze(0)
             sample['label'] = points_2D
         if self.photometric:  # in photometric augmentations labels are unaffected
@@ -89,10 +89,13 @@ class TLSScanData(Dataset):
             sample['homography'] = homographies.astype(np.float32)
             sample['inv_homography'] = inv_homography
             if self.config['data'].get('labels', False):
-                warped_points = warpLabels(points, homographies, height, width)
                 warped_points_2D = np.zeros((inv_homography.shape[0], image.shape[0], image.shape[1]))
-                for i in range(inv_homography.shape[0]):
-                    warped_points_2D[i, :, :] = points_to_2D(warped_points[i], height, width, img=None)
+                warped_points = warpLabels(points, homographies, height, width)
+                if num_iter == 1:
+                    warped_points_2D[0, :, :] = points_to_2D(warped_points, height, width, img=warped_image[0, ...])
+                else:
+                    for i in range(inv_homography.shape[0]):
+                        warped_points_2D[i, :, :] = points_to_2D(warped_points[i], height, width, img=warped_image[i, ...])
                 warped_points_2D = torch.tensor(warped_points_2D, dtype=torch.float32)
                 sample['warped_label'] = warped_points_2D
         sample['image'] = (image[np.newaxis, :, :] / 255.0).astype(np.float32)

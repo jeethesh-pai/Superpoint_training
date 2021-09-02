@@ -32,7 +32,7 @@ data:
                 motion_blur: {max_kernel_size: 3}
         homographic:
             enable: true
-            num: 100 # 100
+            num: 15 # 100
             aggregation: 'sum'
             filter_counts: 0
             homographies:
@@ -41,11 +41,11 @@ data:
                     rotation: true
                     scaling: true
                     perspective: true
-                    scaling_amplitude: 0.2
-                    perspective_amplitude_x: 0.2
-                    perspective_amplitude_y: 0.2
+                    scaling_amplitude: 0.8
+                    perspective_amplitude_x: 0.3
+                    perspective_amplitude_y: 0.3
                     allow_artifacts: true
-                    patch_ratio: 0.85
+                    patch_ratio: 0.95
                     max_angle: 0.785
         valid_border_margin: 3
 
@@ -94,7 +94,7 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/superpoint_v1.pth"
+pretrained: "../my_superpoint_pytorch/colab_log/detector_training_pt1.pt"
 
 
 
