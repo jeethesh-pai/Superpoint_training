@@ -6,7 +6,6 @@ import os
 from photometric import ImgAugTransform
 from utils import compute_valid_mask, sample_homography, warpLabels, warp_image
 from numpy.linalg import inv
-import matplotlib.pyplot as plt
 
 
 def points_to_2D(points: np.ndarray, H: int, W: int, img: np.ndarray) -> np.ndarray:

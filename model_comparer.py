@@ -1,8 +1,6 @@
 import torch
-from model_loader import SuperPointNet
-import numpy as np
-from scipy.ndimage.interpolation import zoom
-from cv2 import cv2
+from model_loader import SuperPointNet, SuperPointNet_gauss2
+
 
 model = SuperPointNet()
 pretrained = "../my_superpoint_pytorch/superpoint_v1.pth"
@@ -20,6 +18,11 @@ for key in keys:
     diff1 = torch.subtract(p_weight, c_weight).sum()
     diff2 = torch.subtract(p_weight, r_weight).sum()
     print(f"{key}:{diff1}, {diff2}")
+
+superPointNet_gauss2_model = SuperPointNet_gauss2()
+model_dict = torch.load("colab_log/superPointNet_170000_checkpoint.pth.tar")
+superPointNet_gauss2_model.load_state_dict(model_dict['model_state_dict'])
+print(superPointNet_gauss2_model)
 
 
 

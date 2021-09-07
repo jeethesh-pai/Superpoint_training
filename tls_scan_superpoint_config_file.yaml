@@ -2,7 +2,7 @@ data:
     dataset: 'TLSScanData'
     generate_label: true
     labels: false
-    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'  # /content/drive/MyDrive/Label
+    label_path: '../pytorch-superpoint/datasets/TLS_Train/Labels_new'  # /content/drive/MyDrive/Label
     # labels: "logs/magicpoint_tls_labels/predictions"
     root: '../pytorch-superpoint/datasets/TLS_Train' # /content/drive/MyDrive
     detector_training: false
@@ -41,7 +41,7 @@ data:
                     rotation: true
                     scaling: true
                     perspective: true
-                    scaling_amplitude: 0.8
+                    scaling_amplitude: 0.2
                     perspective_amplitude_x: 0.3
                     perspective_amplitude_y: 0.3
                     allow_artifacts: true
@@ -61,6 +61,7 @@ model:
     name: 'SuperPointNet_pretrained'
     params: {
     }
+    top_k: 600
     detector_loss:
         loss_type: 'softmax'
     batch_size: 1 # 32
@@ -94,7 +95,4 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/colab_log/detector_training_pt1.pt"
-
-
-
+pretrained: "../my_superpoint_pytorch/colab_log/superPointNet_170000_checkpoint.pth.tar"

@@ -121,8 +121,8 @@ class SuperPointNet(torch.nn.Module):
         return pts, desc, heatmap
 
 
-def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=4, ret_heatmap=False,
-                             limit_detection=1000) -> np.ndarray:
+def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=1, ret_heatmap=False,
+                             limit_detection=600) -> np.ndarray:
     """
     :param semi - Output prediction from SuperpointNet with shape (65, Hc, Wc) - takes only one image at once
     :param conf_threshold - Detector confidence threshold to be applied
@@ -156,6 +156,8 @@ def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=
         toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
         toremove = np.logical_or(toremoveW, toremoveH)
         pts = pts[:, ~toremove]
+        if pts.shape[1] > limit_detection:
+            pts = pts[:, :limit_detection]
     return pts
 
 
@@ -163,13 +165,16 @@ def load_model(checkpoint_path: str, model: torch.nn.Module):
     print('loading model: SuperPointNet ..............')
     if checkpoint_path[-4:] == '.pth':  # if only state_dict ie, weights of the file are stored
         model.load_state_dict(torch.load(checkpoint_path))
+    elif checkpoint_path[-4:] == '.tar':
+        weight_dict = torch.load(checkpoint_path)
+        model.load_state_dict(weight_dict['model_state_dict'])
     else:  # if all data about training is available
         model = torch.load(checkpoint_path)
         # model.load(checkpoint)
     return model
 
 
-class SuperPointNetBatchNorm(torch.nn.Module):
+class SuperPointNetBatchNorm(SuperPointNet):
     """ Pytorch definition of SuperPoint Network with added Batch Normalization. From Daniel De Tone Implementation"""
 
     def __init__(self):
@@ -232,3 +237,135 @@ class SuperPointNetBatchNorm(torch.nn.Module):
         dn = torch.norm(desc, p=2, dim=1)  # Compute the norm.
         desc = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
         return {'semi': semi, 'desc': desc}  # semi is the detector head and desc is the descriptor head
+
+
+class double_conv(torch.nn.Module):
+    """"(conv => BN => ReLU) * 2"""
+
+    def __init__(self, in_ch, out_ch):
+        super(double_conv, self).__init__()
+        self.conv = torch.nn.Sequential(
+            torch.nn.Conv2d(in_ch, out_ch, 3, padding=1),
+            torch.nn.BatchNorm2d(out_ch),
+            torch.nn.ReLU(inplace=True),
+            torch.nn.Conv2d(out_ch, out_ch, 3, padding=1),
+            torch.nn.BatchNorm2d(out_ch),
+            torch.nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x
+
+
+class inconv(torch.nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(inconv, self).__init__()
+        self.conv = double_conv(in_ch, out_ch)
+
+    def forward(self, x):
+        x = self.conv(x)
+        return x
+
+
+class down(torch.nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(down, self).__init__()
+        self.mpconv = torch.nn.Sequential(
+            torch.nn.MaxPool2d(2),
+            double_conv(in_ch, out_ch)
+        )
+
+    def forward(self, x):
+        x = self.mpconv(x)
+        return x
+
+
+class SuperPointNet_gauss2(torch.nn.Module):
+    """ Pytorch definition of SuperPoint Network. """
+
+    def __init__(self, subpixel_channel=1):
+        super(SuperPointNet_gauss2, self).__init__()
+        c1, c2, c3, c4, c5, d1 = 64, 64, 128, 128, 256, 256
+        det_h = 65
+        self.inc = inconv(1, c1)
+        self.down1 = down(c1, c2)
+        self.down2 = down(c2, c3)
+        self.down3 = down(c3, c4)
+        self.relu = torch.nn.ReLU(inplace=True)
+        # Detector Head.
+        self.convPa = torch.nn.Conv2d(c4, c5, kernel_size=(3, 3), stride=(1, 1), padding=1)
+        self.bnPa = torch.nn.BatchNorm2d(c5)
+        self.convPb = torch.nn.Conv2d(c5, det_h, kernel_size=(1, 1), stride=(1, 1), padding=0)
+        self.bnPb = torch.nn.BatchNorm2d(det_h)
+        # Descriptor Head.
+        self.convDa = torch.nn.Conv2d(c4, c5, kernel_size=(3, 3), stride=(1, 1), padding=1)
+        self.bnDa = torch.nn.BatchNorm2d(c5)
+        self.convDb = torch.nn.Conv2d(c5, d1, kernel_size=(1, 1), stride=(1, 1), padding=0)
+        self.bnDb = torch.nn.BatchNorm2d(d1)
+
+    def forward(self, x):
+        """ Forward pass that jointly computes unprocessed point and descriptor
+        tensors.
+        Input
+          x: Image pytorch tensor shaped N x 1 x patch_size x patch_size.
+        Output
+          semi: Output point pytorch tensor shaped N x 65 x H/8 x W/8.
+          desc: Output descriptor pytorch tensor shaped N x 256 x H/8 x W/8.
+        """
+        # Let's stick to this version: first BN, then relu
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+
+        # Detector Head.
+        cPa = self.relu(self.bnPa(self.convPa(x4)))
+        semi = self.bnPb(self.convPb(cPa))
+        # Descriptor Head.
+        cDa = self.relu(self.bnDa(self.convDa(x4)))
+        desc = self.bnDb(self.convDb(cDa))
+
+        dn = torch.norm(desc, p=2, dim=1)  # Compute the norm.
+        desc = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
+        return {'semi': semi, 'desc': desc}
+
+    def eval_mode(self, image: np.ndarray, conf_threshold: float, H: int, W: int, dist_thresh: float, top_k=300) -> \
+            tuple:
+        with torch.no_grad():
+            (_, semi), (_, desc) = self.forward(
+                torch.from_numpy(image[np.newaxis, np.newaxis, :, :]).to('cuda')).items()
+            heatmap = flattenDetection(semi).cpu().numpy().squeeze()
+            xs, ys = np.where(heatmap >= conf_threshold)
+            if len(xs) == 0:
+                return np.zeros((3, 0)), None, None
+            pts = np.zeros((3, len(xs)))
+            pts[0, :] = ys
+            pts[1, :] = xs
+            pts[2, :] = heatmap[xs, ys]
+            pts, _ = nms_fast(pts, H, W, dist_thresh=dist_thresh)
+            inds = np.argsort(-pts[2, :])  # sort by confidence
+            bord = 4  # border to remove
+            toremoveW = np.logical_or(pts[0, :] < bord, pts[0, :] >= (W - bord))
+            toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
+            toremove = np.logical_or(toremoveW, toremoveH)
+            pts = pts[:, ~toremove]
+            if pts.shape[1] > top_k:
+                pts = pts[:, :top_k]
+            #  -- process descriptor
+            D = desc.shape[1]
+            if pts.shape[1] == 0:
+                desc = np.zeros((D, 0))
+            else:
+                samp_pts = torch.from_numpy(pts[:2, :].copy())
+                samp_pts[0, :] = (samp_pts[0, :] / (float(W) / 2.)) - 1.
+                samp_pts[1, :] = (samp_pts[1, :] / (float(H) / 2.)) - 1.
+                samp_pts = samp_pts.transpose(0, 1).contiguous()
+                samp_pts = samp_pts.view(1, 1, -1, 2)
+                samp_pts = samp_pts.float()
+                if self.cuda:
+                    samp_pts = samp_pts.cuda()
+                desc = torch.nn.functional.grid_sample(desc, samp_pts)
+                desc = desc.data.cpu().numpy().reshape(D, -1)
+                desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]
+        return pts, desc, heatmap

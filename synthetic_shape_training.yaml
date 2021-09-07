@@ -1,5 +1,5 @@
 data:
-    dataset: 'TLSScanData'
+    dataset: 'Synthetic-shape'
     generate_label: false
     labels: true
     label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'

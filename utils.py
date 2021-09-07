@@ -580,9 +580,9 @@ def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
 def m_iou(target: torch.Tensor, output: torch.Tensor, det_threshold: float) -> float:
     Softmax = torch.nn.Softmax(dim=1)
     soft_output = Softmax(output)
+    soft_output = soft_output[:, :-1, :, :]  # cancel out the dustbin after taking softmax
     soft_output[soft_output >= det_threshold] = 1
     soft_output[soft_output < det_threshold] = 0
-    soft_output = soft_output[:, :-1, :, :]  # cancel out the dustbin after taking softmax
     # iou = intersection / union
     intersection = torch.mul(target, soft_output)
     union = torch.add(target, soft_output)

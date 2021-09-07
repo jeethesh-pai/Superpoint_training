@@ -54,7 +54,7 @@ train_set = TLSScanData(transform=None, task='train', **config)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
 val_set = TLSScanData(transform=None, task='validation', **config)
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True)
-Net = SuperPointNetBatchNorm()
+Net = SuperPointNet()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
 Net = load_model(config['pretrained'], Net)

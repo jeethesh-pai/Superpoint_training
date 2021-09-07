@@ -1,7 +1,7 @@
 import torch
 import yaml
 from Data_loader import TLSScanData, points_to_2D
-from model_loader import SuperPointNet, load_model, detector_post_processing
+from model_loader import SuperPointNet, load_model, detector_post_processing, SuperPointNet_gauss2
 from utils import flattenDetection, warpLabels, get_grid, filter_points, warp_image, nms_fast
 from torchsummary import summary
 import os
@@ -32,7 +32,9 @@ numHomIter = config['data']['augmentation']['homographic']['num']
 det_threshold = config['model']['detection_threshold']  # detection threshold to threshold the detector heatmap
 size = config['data']['preprocessing']['resize']  # width, height
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=True)
-Net = SuperPointNet()
+# Net = SuperPointNet()
+# Net.load_state_dict(weight_dict)
+Net = SuperPointNet_gauss2()
 Net = load_model(config['pretrained'], Net)
 if torch.cuda.is_available():
     Net.cuda()
@@ -58,7 +60,7 @@ if config['data']['generate_label']:
             output_warped = Net(warped_image)
             semi_warped, _ = output_warped['semi'], output_warped['desc']
             for n in range(numHomIter):
-                pts = detector_post_processing(semi_warped[n, :, :, :])
+                pts = detector_post_processing(semi_warped[n, :, :, :], limit_detection=config['model']['top_k'])
                 temp_heatmap = detector_post_processing(semi_warped[n, :, :, :], ret_heatmap=True)
                 label[n, :, :] = warp_image(temp_heatmap, sample['homography'][0, n, :, :]).squeeze()
             label = np.mean(label, axis=0)  # average the heatmap over the no. of images.
@@ -77,10 +79,12 @@ if config['data']['generate_label']:
             toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
             toremove = np.logical_or(toremoveW, toremoveH)
             pts = pts[:, ~toremove]
+            if pts.shape[1] > config['model']['top_k']:
+                pts = pts[:, :config['model']['top_k']]
             pts = list(zip(pts[1], pts[0]))  # saves points in the form pts =
             # (array(y axis coordinates), array(x axis coordinates))
             filename = os.path.join(label_path, split, sample['name'][0][:-4])
-            plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W, img=sample['image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
-            plt.show()
+            # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W, img=sample['image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
+            # plt.show()
             np.save(filename, pts)
 
