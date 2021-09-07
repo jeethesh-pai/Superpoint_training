@@ -95,4 +95,4 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/colab_log/superPointNet_170000_checkpoint.pth.tar"
+pretrained: "../my_superpoint_pytorch/superPointNet_170000_checkpoint.pth.tar"
