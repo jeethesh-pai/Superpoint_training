@@ -330,7 +330,7 @@ class SuperPointNet_gauss2(torch.nn.Module):
         desc = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
         return {'semi': semi, 'desc': desc}
 
-    def eval_mode(self, image: np.ndarray, conf_threshold: float, H: int, W: int, dist_thresh: float, top_k=300) -> \
+    def eval_mode(self, image: np.ndarray, conf_threshold: float, H: int, W: int, dist_thresh: float, top_k=600) -> \
             tuple:
         with torch.no_grad():
             (_, semi), (_, desc) = self.forward(

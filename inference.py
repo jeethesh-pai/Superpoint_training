@@ -32,7 +32,7 @@ def offset_keypoint(keypoint: list, img1_shape: tuple) -> list:
 
 
 def extract_superpoint_desc_keypoints(model: torch.nn.Module, img: str, size: tuple,
-                                      conf_threshold=0.015, dist_thresh=4):
+                                      conf_threshold=0.015, dist_thresh=1):
     img_gray = image_preprocess(img, size=size)
     keypoint, descriptor, heatmap = model.eval_mode(img_gray, conf_threshold, size[1], size[0], dist_thresh)
     keypoint = np.transpose(keypoint)
@@ -64,6 +64,8 @@ def draw_matches_superpoint(img1: str, img2: str, nn_thresh: float, size: tuple)
     combined_image = cv2.hconcat([img1 * 255, img2 * 255])
     kp_image = np.copy(combined_image)
     kp_image = cv2.drawKeypoints(kp_image.astype(np.uint8), combined_keypoint, None, color=(0, 255, 0))
+    # plt.imshow(kp_image, cmap='gray')
+    # plt.show()
     match_point1 = cv2.KeyPoint_convert(matched_keypoint1)
     match_point2 = cv2.KeyPoint_convert(matched_keypoint2)
     H, inlier = cv2.findHomography(match_point1[:, [1, 0]], match_point2[:, [1, 0]], cv2.RANSAC)
@@ -133,7 +135,7 @@ def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
     return descriptor1, descriptor2
 
 
-image_dir = "../pytorch-superpoint/datasets/TLS_Train/Train/"
+image_dir = "../pytorch-superpoint/datasets/TLS_Train/Test/"
 
 # uncomment the following for SuperpointNet()
 # Net = SuperPointNetBatchNorm()
@@ -143,12 +145,12 @@ image_dir = "../pytorch-superpoint/datasets/TLS_Train/Train/"
 # Net.load_state_dict(weight_dict)
 
 Net = SuperPointNet_gauss2()
-model_dict = torch.load("colab_log/superPointNet_170000_checkpoint.pth.tar")
-Net.load_state_dict(model_dict['model_state_dict'])
+model = torch.load("colab_log/detector_train_guass_1.pt")
+Net.load_state_dict(model)
 
 Net = Net.to('cuda')
-image1 = image_dir + "IMG_9492.JPG"
-image2 = image_dir + "synthetic_image_inter_gc_00.jpg"
+image1 = image_dir + "IMG_2047.JPG"
+image2 = image_dir + "rgb_syn_library_z1.jpg"
 # desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
 combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.7, size=(856, 576))
 plt.imshow(combined)

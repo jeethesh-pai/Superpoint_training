@@ -1,7 +1,7 @@
 import torch
 import yaml
 from Data_loader import TLSScanData
-from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm
+from model_loader import SuperPointNet, load_model, SuperPointNet_gauss2
 import torch.optim as optim
 from utils import detector_loss, descriptor_loss_2
 from torchsummary import summary
@@ -54,7 +54,7 @@ train_set = TLSScanData(transform=None, task='train', **config)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
 val_set = TLSScanData(transform=None, task='validation', **config)
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True)
-Net = SuperPointNet()
+Net = SuperPointNet_gauss2()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
 Net = load_model(config['pretrained'], Net)
