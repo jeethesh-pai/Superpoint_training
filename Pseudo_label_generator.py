@@ -60,10 +60,9 @@ if config['data']['generate_label']:
             output_warped = Net(warped_image)
             semi_warped, _ = output_warped['semi'], output_warped['desc']
             for n in range(numHomIter):
-                pts = detector_post_processing(semi_warped[n, :, :, :], limit_detection=config['model']['top_k'])
                 temp_heatmap = detector_post_processing(semi_warped[n, :, :, :], ret_heatmap=True)
                 label[n, :, :] = warp_image(temp_heatmap, sample['homography'][0, n, :, :]).squeeze()
-            label = np.mean(label, axis=0)  # average the heatmap over the no. of images.
+            label = np.sum(label, axis=0)  # average the heatmap over the no. of images.
             xs, ys = np.where(label >= config['model']['detection_threshold'])  # Confidence threshold.
             pts = np.zeros((3, len(xs)))  # Populate point data sized 3xN.
             pts[0, :] = ys
