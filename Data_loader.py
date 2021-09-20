@@ -23,27 +23,17 @@ def points_to_2D(points: np.ndarray, H: int, W: int, img: np.ndarray) -> np.ndar
     return labels
 
 
-def point_erode(points: np.ndarray) -> np.ndarray:
-    y_coord, x_coord = points[:, 0], points[:, 1]
-    pos = []
-    for i in range(len(y_coord) - 1):
-        diff_y = y_coord[i + 1:] - y_coord[i]
-        diff_x = x_coord[i + 1:] - x_coord[i]
-        dist = np.linalg.norm(np.vstack((diff_x, diff_y)), None, axis=0)
-        pos_to_delete = np.where(np.logical_and(dist > 0, dist < 5))
-        if len(pos_to_delete) > 0:
-            pos.extend(pos_to_delete[0] + i + 1)
-    y_coord = np.delete(y_coord, np.unique(pos), None)
-    x_coord = np.delete(x_coord, np.unique(pos), None)
-    return y_coord, x_coord
-
-
 class TLSScanData(Dataset):
     def __init__(self, transform=None, task='train', **config: dict):
         super(TLSScanData, self).__init__()
         self.transform = transform
         self.config = config
-        self.task = 'Train' if task == 'train' else 'Validation'
+        if task == 'train':
+            self.task = 'Train'
+        elif task == 'test':
+            self.task = 'Test'
+        else:
+            self.task = 'Validation'
         if self.config['data'].get('labels', False):
             self.label_path = os.path.join(self.config['data']['label_path'], self.task)
         self.image_path = os.path.join(self.config['data']['root'], self.task)

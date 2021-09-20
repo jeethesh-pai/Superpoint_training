@@ -32,7 +32,7 @@ data:
                 motion_blur: {max_kernel_size: 3}
         homographic:
             enable: true
-            num: 30 # 100
+            num: 10 # 100
             aggregation: 'sum'
             filter_counts: 0
             homographies:
@@ -41,9 +41,9 @@ data:
                     rotation: true
                     scaling: true
                     perspective: true
-                    scaling_amplitude: 0.2
-                    perspective_amplitude_x: 0.3
-                    perspective_amplitude_y: 0.3
+                    scaling_amplitude: 1.2
+                    perspective_amplitude_x: 0.6
+                    perspective_amplitude_y: 0.6
                     allow_artifacts: true
                     patch_ratio: 0.95
                     max_angle: 0.785
@@ -95,4 +95,4 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/superPointNet_170000_checkpoint.pth.tar"
+pretrained: "../my_superpoint_pytorch/colab_log/gauss_model_1.pt"

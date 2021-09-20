@@ -2,7 +2,7 @@ data:
     dataset: 'TLSScanData'
     generate_label: false
     labels: true
-    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label-20210914T133840Z-001/Label'
+    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label-20210914T161448Z-001/Label'
     # labels: "logs/magicpoint_tls_labels/predictions"
     root: '../pytorch-superpoint/datasets/TLS_Train' # datasets/COCO
     detector_training: true

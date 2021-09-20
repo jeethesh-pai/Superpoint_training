@@ -35,7 +35,8 @@ data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuff
 # Net = SuperPointNet()
 # Net.load_state_dict(weight_dict)
 Net = SuperPointNet_gauss2()
-Net = load_model(config['pretrained'], Net)
+weights = load_model(config['pretrained'], Net)
+Net.load_state_dict(weights)
 if torch.cuda.is_available():
     Net.cuda()
 summary(Net, (1, size[1], size[0]), batch_size=1)  # shows the trained network architecture
@@ -83,7 +84,7 @@ if config['data']['generate_label']:
             pts = list(zip(pts[1], pts[0]))  # saves points in the form pts =
             # (array(y axis coordinates), array(x axis coordinates))
             filename = os.path.join(label_path, split, sample['name'][0][:-4])
-            # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W, img=sample['image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
-            # plt.show()
+            plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W, img=sample['image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
+            plt.show()
             np.save(filename, pts)
 

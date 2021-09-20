@@ -40,7 +40,7 @@ def plot_grad_flow(named_parameters):
 parser = argparse.ArgumentParser(description="This scripts helps to train Superpoint for detector training after"
                                              "Homographic adaptation labels are made as mentioned in the paper")
 parser.add_argument('--config', help='Path to config file',
-                    default="detector_training.yaml")
+                    default="joint_training.yaml")
 args = parser.parse_args()
 
 config_file_path = args.config
@@ -57,7 +57,8 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['ev
 Net = SuperPointNet_gauss2()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
-Net = load_model(config['pretrained'], Net)
+model_weights = load_model(config['pretrained'], Net)
+Net.load_state_dict(model_weights)
 if torch.cuda.is_available():
     Net.cuda()
 summary(Net, (1, size[1], size[0]), batch_size=1)
@@ -76,8 +77,8 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         running_loss, batch_iou = 0, 0
         train_bar = tqdm.tqdm(train_loader)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is false here
-            # plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
-            # plt.show()
+            plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
+            plt.show()
             if torch.cuda.is_available():
                 sample['image'] = sample['image'].to('cuda')
                 sample['label'] = sample['label'].to('cuda')
@@ -140,7 +141,6 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
         writer.add_scalar('IoU', batch_iou, n_iter + 1)
         writer.add_scalar('Val_IoU', val_batch_iou, n_iter + 1)
-        something = Net.parameters()
         for key, values in copy.deepcopy(Net.state_dict()).items():
             writer.add_histogram(key, values, n_iter + 1)
         writer.flush()
@@ -155,6 +155,15 @@ else:  # start descriptor training with the homographically adapted model
     old_state_dict = {}
     for key in Net.state_dict():
         old_state_dict[key] = Net.state_dict()[key].clone()
+    tot_params = sum(1 for _ in Net.parameters())
+    count = 0
+    for params in Net.parameters():
+        if count < 40:
+            params.requires_grad = False
+            count += 1
+    for params in Net.named_parameters():
+        if params[1].requires_grad is False:
+            print(params[0])
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
         running_loss, batch_iou = 0, 0
         train_bar = tqdm.tqdm(val_loader)

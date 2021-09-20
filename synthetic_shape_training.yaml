@@ -2,9 +2,9 @@ data:
     dataset: 'Synthetic-shape'
     generate_label: false
     labels: true
-    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label'
+    label_path: '../pytorch-superpoint/datasets/TLS_Train/synthetic_shapes_v6'
     # labels: "logs/magicpoint_tls_labels/predictions"
-    root: '../pytorch-superpoint/datasets/TLS_Train' # datasets/COCO
+    root: '../pytorch-superpoint/datasets/TLS_Train/synthetic_shapes_v6' # datasets/COCO
     detector_training: true
     gaussian_label:
         enable: true
