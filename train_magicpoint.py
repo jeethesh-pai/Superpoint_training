@@ -2,7 +2,7 @@ import torch
 import yaml
 from Data_loader import TLSScanData
 from Synthetic_dataset_loader import SyntheticDataset
-from model_loader import SuperPointNet, load_model, SuperPointNet_gauss2
+from model_loader import SuperPointNet, load_model, SuperPointNet_gauss2, SuperPointNetBatchNorm
 import torch.optim as optim
 from utils import detector_loss, descriptor_loss_2
 from torchsummary import summary
@@ -33,7 +33,7 @@ train_set = SyntheticDataset(transform=None, task='train', **config)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
 val_set = SyntheticDataset(transform=None, task='validation', **config)
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True)
-Net = SuperPointNet()
+Net = SuperPointNetBatchNorm()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 max_iter = config['train_iter']  # also called as epochs
 n_iter = 0  # 1 iteration refers to the time taken to update the parameters ie. one batch = 1 iteration
@@ -43,13 +43,13 @@ n_iter = 0  # 1 iteration refers to the time taken to update the parameters ie. 
 if torch.cuda.is_available():
     Net.cuda()
 summary(Net, (1, size[1], size[0]), batch_size=1)
-train_bar = tqdm.tqdm(train_loader)
 prev_val_loss = 0
 writer = SummaryWriter(log_dir="logs/magicpoint_training")
 writer.add_graph(Net, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).cuda())
 while n_iter < max_iter:
     running_loss, batch_iou = 0, 0
     Net.train(mode=True)
+    train_bar = tqdm.tqdm(train_loader)
     for i, sample in enumerate(train_bar):
         if torch.cuda.is_available():
             sample['image'] = sample['image'].to('cuda')
@@ -66,7 +66,9 @@ while n_iter < max_iter:
         loss.backward()
         optimizer.step()
         running_loss += loss.item()
-        train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)},"
+        # train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)},"
+        #                           f" IoU: {batch_iou}")
+        train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss},"
                                   f" IoU: {batch_iou}")
     val_bar = tqdm.tqdm(val_loader)
     Net.train(mode=False)
