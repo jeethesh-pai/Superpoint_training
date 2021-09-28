@@ -68,7 +68,7 @@ while n_iter < max_iter:
         running_loss += loss.item()
         # train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)},"
         #                           f" IoU: {batch_iou}")
-        train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss},"
+        train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss/ (i + 1)},"
                                   f" IoU: {batch_iou}")
     val_bar = tqdm.tqdm(val_loader)
     Net.train(mode=False)

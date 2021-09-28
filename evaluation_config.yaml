@@ -1,5 +1,5 @@
 data:
-    root: '../pytorch-superpoint/datasets/TLS_Train' # # /content/drive/MyDrive
+    root: '../pytorch-superpoint/datasets/TLS_Train/synthetic_shapes_v6' # # /content/drive/MyDrive
     preprocessing:
         resize: [320, 216]  # width, height
         # resize: [480, 640]
@@ -19,7 +19,7 @@ data:
                     kernel_size_range: [100, 150]
                 motion_blur: {max_kernel_size: 3}
         homographic:
-            enable: true
+            enable: false
             num: 1 # 100
             aggregation: 'sum'
             filter_counts: 0
@@ -44,7 +44,7 @@ model:
     descriptor_dist: 8 # 4, 7.5
     epsilon: 3
 
-pretrained: "../my_superpoint_pytorch/colab_log/detector_training_pt2.pt"
+pretrained: "../my_superpoint_pytorch/colab_log/magicpoint.pt"
 
 
 
