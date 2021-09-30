@@ -123,6 +123,16 @@ class SuperPointNet(torch.nn.Module):
         return pts, desc, heatmap
 
 
+def semi_to_heatmap(semi: torch.Tensor) -> np.ndarray:
+    with torch.no_grad():
+        SoftMax = torch.nn.Softmax(dim=1)  # apply softmax on the channel dimension with 65
+        soft_output = SoftMax(semi.squeeze())
+        soft_output = soft_output[:, :-1, :, :]
+        pixel_shuffle = torch.nn.PixelShuffle(upscale_factor=8)
+        heatmap = pixel_shuffle(soft_output).squeeze()
+        return heatmap
+
+
 def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=1, ret_heatmap=False,
                              limit_detection=600) -> np.ndarray:
     """

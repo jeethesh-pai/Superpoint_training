@@ -328,6 +328,38 @@ def warp_image(img: np.ndarray, inv_homography: np.ndarray) -> np.ndarray:
     return canvas
 
 
+def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
+    """
+    Inverse warp images in batch
+    :param img:
+        batch of images
+        tensor [batch_size, 1, H, W]
+    :param mat_homo_inv:
+        batch of homography matrices
+        tensor [batch_size, 3, 3]
+    :param device:
+        GPU device or CPU
+    :return:
+        batch of warped images
+        tensor [batch_size, 1, H, W]
+    """
+    # compute inverse warped points
+    img = img.reshape((-1, 1, img.shape[1], img.shape[2]))
+
+    Batch, channel, H, W = img.shape
+    coor_cells = torch.stack(torch.meshgrid(torch.linspace(-1, 1, W), torch.linspace(-1, 1, H)), dim=2)
+    coor_cells = coor_cells.transpose(0, 1)
+    coor_cells = coor_cells.to(device)
+    coor_cells = coor_cells.contiguous()
+
+    src_pixel_coords = warp_points(coor_cells.view([-1, 2]), mat_homo_inv, device)
+    src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
+    src_pixel_coords = src_pixel_coords.float()
+
+    warped_img = F.grid_sample(img, src_pixel_coords.to('cuda'), mode=mode, align_corners=True)
+    return warped_img.to('cpu')
+
+
 def labels2Dto3D(labels, cell_size, add_dustbin=True):
     """
     Change the shape of labels into 3D. Batch of labels.
@@ -837,4 +869,3 @@ def nn_match_descriptor(desc1: torch.Tensor, desc2: torch.Tensor, nn_thresh: flo
     matches[1, :] = m_idx2
     matches[2, :] = scores
     return matches
-
