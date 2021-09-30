@@ -5,7 +5,7 @@ data:
         # resize: [480, 640]
     augmentation:
         photometric:
-            enable: true
+            enable: false
             primitives: [
                 'random_brightness', 'random_contrast', 'additive_speckle_noise',
                 'additive_gaussian_noise', 'additive_shade', 'motion_blur']
