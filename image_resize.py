@@ -1,13 +1,19 @@
 from cv2 import cv2
 import os
 import tqdm
+import shutil
 
 
 directory = "../pytorch-superpoint/datasets/MSCOCO"
 train_files = [os.path.join(directory, 'Train', file) for file in os.listdir(directory + '/Train/')]
-val_files = [os.path.join(directory, 'Validation', file) for file in os.listdir(directory + '/Validation/')]
-for file in tqdm.tqdm(train_files):
-    image = cv2.imread(file)
-    image = cv2.resize(image, (320, 216))
-    cv2.imwrite(file, image)
+num_files = len(os.listdir(directory + '/Train/'))
+count = 1
+for i in tqdm.tqdm(range(num_files)):
+    if count < num_files / 2:
+        shutil.move(train_files[i], train_files[i].replace('Train', 'Train_1'))
+    else:
+        shutil.move(train_files[i], train_files[i].replace('Train', 'Train_2'))
+    count += 1
+
+
 
