@@ -123,14 +123,18 @@ class SuperPointNet(torch.nn.Module):
         return pts, desc, heatmap
 
 
+@torch.no_grad()
 def semi_to_heatmap(semi: torch.Tensor) -> np.ndarray:
-    with torch.no_grad():
-        SoftMax = torch.nn.Softmax(dim=1)  # apply softmax on the channel dimension with 65
-        soft_output = SoftMax(semi.squeeze())
-        soft_output = soft_output[:, :-1, :, :]
-        pixel_shuffle = torch.nn.PixelShuffle(upscale_factor=8)
-        heatmap = pixel_shuffle(soft_output).squeeze()
-        return heatmap
+    """
+    This will work only if the tensor shape is [batch_size, channel, height, width]
+    """
+    assert len(semi.shape) == 4
+    SoftMax = torch.nn.Softmax(dim=1)  # apply softmax on the channel dimension with 65
+    soft_output = SoftMax(semi.squeeze())
+    soft_output = soft_output[:, :-1, :, :]
+    pixel_shuffle = torch.nn.PixelShuffle(upscale_factor=8)
+    heatmap = pixel_shuffle(soft_output).squeeze()
+    return heatmap
 
 
 def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=1, ret_heatmap=False,
@@ -174,6 +178,7 @@ def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=
 
 
 def load_model(checkpoint_path: str, model: torch.nn.Module):
+    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
     print('loading model: SuperPointNet ..............')
     if checkpoint_path[-4:] == '.pth':  # if only state_dict ie, weights of the file are stored
         model.load_state_dict(torch.load(checkpoint_path))
@@ -181,7 +186,7 @@ def load_model(checkpoint_path: str, model: torch.nn.Module):
         weight_dict = torch.load(checkpoint_path)
         model.load_state_dict(weight_dict['model_state_dict'])
     else:  # if all data about training is available
-        model = torch.load(checkpoint_path)
+        model = torch.load(checkpoint_path, map_location=device)
         # model.load(checkpoint)
     return model
 
@@ -195,29 +200,39 @@ class SuperPointNetBatchNorm(SuperPointNet):
         self.pool = torch.nn.MaxPool2d(kernel_size=2, stride=2)
         c1, c2, c3, c4, c5, d1 = 64, 64, 128, 128, 256, 256
         # Shared Encoder.
-        self.conv1a = torch.nn.Sequential(torch.nn.Conv2d(1, c1, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c1), torch.nn.ReLU(inplace=True))
-        self.conv1b = torch.nn.Sequential(torch.nn.Conv2d(c1, c1, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c1), torch.nn.ReLU(inplace=True))
-        self.conv2a = torch.nn.Sequential(torch.nn.Conv2d(c1, c2, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c2), torch.nn.ReLU(inplace=True))
-        self.conv2b = torch.nn.Sequential(torch.nn.Conv2d(c2, c2, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c2), torch.nn.ReLU(inplace=True))
-        self.conv3a = torch.nn.Sequential(torch.nn.Conv2d(c2, c3, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c3), torch.nn.ReLU(inplace=True))
-        self.conv3b = torch.nn.Sequential(torch.nn.Conv2d(c3, c3, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c3), torch.nn.ReLU(inplace=True))
-        self.conv4a = torch.nn.Sequential(torch.nn.Conv2d(c3, c4, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c4), torch.nn.ReLU(inplace=True))
-        self.conv4b = torch.nn.Sequential(torch.nn.Conv2d(c4, c4, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c4), torch.nn.ReLU(inplace=True))
+        self.conv1a = torch.nn.Sequential(
+            torch.nn.Conv2d(1, c1, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c1), torch.nn.ReLU(inplace=True))
+        self.conv1b = torch.nn.Sequential(
+            torch.nn.Conv2d(c1, c1, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c1), torch.nn.ReLU(inplace=True))
+        self.conv2a = torch.nn.Sequential(
+            torch.nn.Conv2d(c1, c2, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c2), torch.nn.ReLU(inplace=True))
+        self.conv2b = torch.nn.Sequential(
+            torch.nn.Conv2d(c2, c2, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c2), torch.nn.ReLU(inplace=True))
+        self.conv3a = torch.nn.Sequential(
+            torch.nn.Conv2d(c2, c3, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c3), torch.nn.ReLU(inplace=True))
+        self.conv3b = torch.nn.Sequential(
+            torch.nn.Conv2d(c3, c3, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c3), torch.nn.ReLU(inplace=True))
+        self.conv4a = torch.nn.Sequential(
+            torch.nn.Conv2d(c3, c4, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c4), torch.nn.ReLU(inplace=True))
+        self.conv4b = torch.nn.Sequential(
+            torch.nn.Conv2d(c4, c4, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c4), torch.nn.ReLU(inplace=True))
         # Detector Head.
-        self.convPa = torch.nn.Sequential(torch.nn.Conv2d(c4, c5, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c5), torch.nn.ReLU(inplace=True))
+        self.convPa = torch.nn.Sequential(
+            torch.nn.Conv2d(c4, c5, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c5), torch.nn.ReLU(inplace=True))
         self.convPb = torch.nn.Conv2d(c5, 65, kernel_size=(1, 1), stride=(1, 1), padding=0)
         # Descriptor Head.
-        self.convDa = torch.nn.Sequential(torch.nn.Conv2d(c4, c5, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
-                                          torch.nn.BatchNorm2d(num_features=c5), torch.nn.ReLU(inplace=True))
+        self.convDa = torch.nn.Sequential(
+            torch.nn.Conv2d(c4, c5, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=c5), torch.nn.ReLU(inplace=True))
         self.convDb = torch.nn.Conv2d(c5, d1, kernel_size=(1, 1), stride=(1, 1), padding=0)
 
     def forward(self, x: torch.Tensor) -> dict:

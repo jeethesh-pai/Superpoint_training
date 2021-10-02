@@ -2,9 +2,9 @@ data:
     dataset: 'TLSScanData'
     generate_label: true
     labels: false
-    label_path: '../pytorch-superpoint/datasets/MSCOCO/Labels'  # /content/drive/MyDrive/Label
+    label_path: '../Dataset/MSCOCO/Labels'  # /content/drive/MyDrive/Label
     # labels: "logs/magicpoint_tls_labels/predictions"
-    root: '../pytorch-superpoint/datasets/MSCOCO' # /content/drive/MyDrive
+    root: '../Dataset/MSCOCO' # /content/drive/MyDrive
     detector_training: false
     gaussian_label:
         enable: true
@@ -41,7 +41,7 @@ data:
                     rotation: true
                     scaling: false
                     perspective: true
-                    scaling_amplitude: 1.2
+                    scaling_amplitude: 0.2
                     perspective_amplitude_x: 0.3
                     perspective_amplitude_y: 0.3
                     allow_artifacts: true
@@ -95,4 +95,4 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/colab_log/magicpoint.pt"
+pretrained: "../magicpoint.pt"

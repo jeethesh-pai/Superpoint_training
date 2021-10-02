@@ -344,7 +344,8 @@ def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
         tensor [batch_size, 1, H, W]
     """
     # compute inverse warped points
-    img = img.reshape((-1, 1, img.shape[1], img.shape[2]))
+    if len(img.shape) == 3:
+        img = img.reshape((-1, 1, img.shape[1], img.shape[2]))
 
     Batch, channel, H, W = img.shape
     coor_cells = torch.stack(torch.meshgrid(torch.linspace(-1, 1, W), torch.linspace(-1, 1, H)), dim=2)
@@ -356,8 +357,8 @@ def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
     src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
     src_pixel_coords = src_pixel_coords.float()
 
-    warped_img = F.grid_sample(img, src_pixel_coords.to('cuda'), mode=mode, align_corners=True)
-    return warped_img.to('cpu')
+    warped_img = F.grid_sample(img, src_pixel_coords.to(device), mode=mode, align_corners=True)
+    return warped_img.to(device).squeeze()
 
 
 def labels2Dto3D(labels, cell_size, add_dustbin=True):

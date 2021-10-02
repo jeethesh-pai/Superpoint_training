@@ -10,35 +10,36 @@ import matplotlib.pyplot as plt
 import tqdm
 import warnings
 import argparse
+
 warnings.simplefilter("ignore")
-
-
 
 parser = argparse.ArgumentParser(description="This scripts helps to generate pseudo ground truth label for Superpoint"
                                              "Homographic adaptation as mentioned in the paper")
 parser.add_argument('--config', help='Path to config file',
                     default="../my_superpoint_pytorch/tls_scan_superpoint_config_file.yaml")
-parser.add_argument('--split',  help='dataset split - train/validation', default='train')
+parser.add_argument('--split', help='dataset split - train/validation', default='train')
 args = parser.parse_args()
-
 
 config_file_path = args.config
 with open(config_file_path) as path:
     config = yaml.load(path)
 data_set = TLSScanData(transform=None, task=args.split, **config)
 split = "Train" if args.split == 'train' else "Validation"
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 batch_size = config['model']['batch_size']
 numHomIter = config['data']['augmentation']['homographic']['num']
 det_threshold = config['model']['detection_threshold']  # detection threshold to threshold the detector heatmap
 size = config['data']['preprocessing']['resize']  # width, height
-data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=True)
+data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=True,
+                                          pin_memory=True, prefetch_factor=2)
+# include num_workers if trained on GPU
 # Net = SuperPointNet()
 # Net.load_state_dict(weight_dict)
 Net = SuperPointNetBatchNorm()
 weights = load_model(config['pretrained'], Net)
 Net.load_state_dict(weights)
-if torch.cuda.is_available():
-    Net.cuda()
+Net.to(device)
+Net.train(mode=False)
 summary(Net, (1, size[1], size[0]), batch_size=1)  # shows the trained network architecture
 if config['data']['generate_label']:
     label_path = config['data']['label_path']
@@ -48,9 +49,9 @@ if config['data']['generate_label']:
     for sample in tqdm_bar:
         tqdm_bar.set_description(f"{args.split} Labels being created...")
         agg_label = np.zeros_like(sample['image'])
-        if torch.cuda.is_available():
-            sample['image'] = sample['image'].to('cuda')
-            sample['warped_image'] = sample['warped_image'].to('cuda').squeeze()  # squeeze the batch dimension as its 1
+        sample['image'] = sample['image'].to(device)
+        sample['warped_image'] = sample['warped_image'].to(device).squeeze()  # squeeze the batch dimension as its 1
+        sample['homography'] = sample['homography'].to(device)
         # to store the homographic detections for averaging the response
         # label = np.zeros((batch_size + numHomIter, size[1], size[0]), dtype=np.float32)
         with torch.no_grad():
@@ -63,14 +64,11 @@ if config['data']['generate_label']:
                 output_warped = Net(sample['warped_image'][batch, ...].unsqueeze(1))
                 semi_warped, _ = output_warped['semi'], output_warped['desc']
                 batch_heatmap = semi_to_heatmap(semi_warped)
-                new_label = inv_warp_image_batch(batch_heatmap, sample['homography'][batch, ...].unsqueeze(0)).squeeze()
-                new_label = torch.cat([new_label, label[batch, :, :].to('cpu').unsqueeze(0)], dim=0)
+                new_label = inv_warp_image_batch(batch_heatmap, sample['homography'][batch, ...].unsqueeze(0),
+                                                 device=device).squeeze()
+                new_label = torch.cat([new_label, label[batch, :, :].to(device).unsqueeze(0)], dim=0)
                 new_label = torch.sum(new_label, dim=0)
-                agg_label[batch, ...] = new_label
-            # for n in range(numHomIter):
-            #     temp_heatmap = detector_post_processing(semi_warped[n, :, :, :], ret_heatmap=True)
-            #     label[n, :, :] = warp_image(temp_heatmap, sample['homography'][0, n, :, :]).squeeze()
-            # label = np.sum(label, axis=0)  # average the heatmap over the no. of images.
+                agg_label[batch, ...] = new_label.to('cpu').numpy()
             for batch in range(batch_size):
                 label = agg_label[batch, ...].squeeze()
                 xs, ys = np.where(label >= config['model']['detection_threshold'])  # Confidence threshold.
@@ -92,9 +90,8 @@ if config['data']['generate_label']:
                     pts = pts[:, :config['model']['top_k']]
                 pts = list(zip(pts[1], pts[0]))  # saves points in the form pts =
                 # (array(y axis coordinates), array(x axis coordinates))
-                filename = os.path.join(label_path, split, sample['name'][0][:-4])
-                # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
-                #                         img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
-                # plt.show()
+                filename = os.path.join(label_path, split, sample['name'][batch][:-4])
+                plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
+                                        img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
+                plt.show()
                 np.save(filename, pts)
-
