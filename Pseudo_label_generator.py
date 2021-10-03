@@ -60,7 +60,7 @@ if config['data']['generate_label']:
             label = semi_to_heatmap(semi)
             # warped_image = sample['warped_image'].unsqueeze(1)
             # batch size for prediction
-            for batch in range(batch_size):
+            for batch in range(sample['image'].shape[0]):
                 output_warped = Net(sample['warped_image'][batch, ...].unsqueeze(1))
                 semi_warped, _ = output_warped['semi'], output_warped['desc']
                 batch_heatmap = semi_to_heatmap(semi_warped)
@@ -69,7 +69,7 @@ if config['data']['generate_label']:
                 new_label = torch.cat([new_label, label[batch, :, :].to(device).unsqueeze(0)], dim=0)
                 new_label = torch.sum(new_label, dim=0)
                 agg_label[batch, ...] = new_label.to('cpu').numpy()
-            for batch in range(batch_size):
+            for batch in range(sample['image'].shape[0]):
                 label = agg_label[batch, ...].squeeze()
                 xs, ys = np.where(label >= config['model']['detection_threshold'])  # Confidence threshold.
                 pts = np.zeros((3, len(xs)))  # Populate point data sized 3xN.

@@ -1,13 +1,12 @@
 import torch
 import yaml
 from Data_loader import TLSScanData
-from model_loader import SuperPointNet, load_model, SuperPointNet_gauss2
+from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm
 import torch.optim as optim
 from utils import detector_loss, descriptor_loss_2
 from torchsummary import summary
 import copy
-import os
-import numpy as np
+from collections import namedtuple
 from tensorboardX import SummaryWriter
 import matplotlib.pyplot as plt
 import tqdm
@@ -16,6 +15,34 @@ import argparse
 from torchviz import make_dot
 
 warnings.simplefilter("ignore")
+
+
+class ModelWrapper(torch.nn.Module):
+    """
+    Wrapper class for model with dict/list rvalues. This wraps model with dictionary outputs
+    """
+
+    def __init__(self, model: torch.nn.Module) -> None:
+        """
+        Init call.
+        """
+        super().__init__()
+        self.model = model
+
+    def forward(self, input_x: torch.Tensor):
+        """
+        Wrap forward call.
+        """
+        data = self.model(input_x)
+
+        if isinstance(data, dict):
+            data_named_tuple = namedtuple("ModelEndpoints", sorted(data.keys()))  # type: ignore
+            data = data_named_tuple(**data)  # type: ignore
+
+        elif isinstance(data, list):
+            data = tuple(data)
+
+        return data
 
 
 def plot_grad_flow(named_parameters):
@@ -51,20 +78,23 @@ numHomIter = config['data']['augmentation']['homographic']['num']
 det_threshold = config['model']['detection_threshold']  # detection threshold to threshold the detector heatmap
 size = config['data']['preprocessing']['resize']  # width, height
 train_set = TLSScanData(transform=None, task='train', **config)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True,
+                                           prefetch_factor=4)
 val_set = TLSScanData(transform=None, task='validation', **config)
-val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True)
-Net = SuperPointNet_gauss2()
+val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True,
+                                         pin_memory=True, prefetch_factor=4)
+Net = SuperPointNetBatchNorm()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 model_weights = load_model(config['pretrained'], Net)
 Net.load_state_dict(model_weights)
-if torch.cuda.is_available():
-    Net.cuda()
+Net.to(device)
 summary(Net, (1, size[1], size[0]), batch_size=1)
+wrappedModel = ModelWrapper(Net)
 if config['data']['detector_training']:  # we bootstrap the Superpoint detector using homographic adapted labels
-    writer = SummaryWriter(log_dir="logs/detector_training")
-    writer.add_graph(Net, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).cuda())
+    writer = SummaryWriter(log_dir="../logs/homoAdaptIter1")
+    writer.add_graph(wrappedModel, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).to(device))
     max_iter = config['train_iter']  # also called as epochs
     n_iter = 0
     prev_val_loss = 0
@@ -74,23 +104,18 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
     for key in Net.state_dict():
         old_state_dict[key] = Net.state_dict()[key].clone()
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
-        running_loss, batch_iou = 0, 0
+        running_loss = 0
         train_bar = tqdm.tqdm(train_loader)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is false here
-            plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
-            plt.show()
-            if torch.cuda.is_available():
-                sample['image'] = sample['image'].to('cuda')
-                sample['label'] = sample['label'].to('cuda')
+            # plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
+            # plt.show()
+            sample['image'] = sample['image'].to(device)
+            sample['label'] = sample['label'].to(device)
             optimizer.zero_grad()
             out = Net(sample['image'])
             semi, _ = out['semi'], out['desc']
-            det_out = detector_loss(sample['label'], semi, det_threshold=det_threshold)
-            loss, iou = det_out['loss'], det_out['iou']
-            if i == 0:
-                batch_iou = iou
-            else:
-                batch_iou = (batch_iou + iou) / 2
+            det_out = detector_loss(sample['label'], semi, device=device)
+            loss = det_out['loss']
             loss.backward()
             # print('loss_grad:', loss.grad)
             # print('semi_grad: ', semi.grad.abs().mean())
@@ -101,8 +126,7 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
             # plot_grad_flow(Net.named_parameters())
             optimizer.step()
             running_loss += loss.item()
-            train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)},"
-                                      f" IoU: {batch_iou}")
+            train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)}")
         running_val_loss, val_batch_iou = 0, 0
         # plt.show()
         # for key in Net.state_dict():
@@ -115,32 +139,25 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         val_bar = tqdm.tqdm(val_loader)
         Net.train(mode=False)
         for j, val_sample in enumerate(val_bar):
-            if torch.cuda.is_available():
-                val_sample['image'] = val_sample['image'].to('cuda')
-                val_sample['label'] = val_sample['label'].to('cuda')
+            val_sample['image'] = val_sample['image'].to(device)
+            val_sample['label'] = val_sample['label'].to(device)
             with torch.no_grad():
                 val_out = Net(val_sample['image'])
-                val_det_out = detector_loss(val_sample['label'], val_out['semi'], det_threshold)
+                val_det_out = detector_loss(val_sample['label'], val_out['semi'], device=device)
                 running_val_loss += val_det_out['loss'].item()
-                if val_batch_iou == 0:
-                    val_batch_iou = val_det_out['iou']
-                else:
-                    val_batch_iou = (val_batch_iou + val_det_out['iou']) / 2
             val_bar.set_description(f"Validation -- Epoch- {n_iter + 1} / {max_iter} - Validation loss: "
-                                    f"{running_val_loss / (j + 1)}, Validation IoU: {val_batch_iou}")
+                                    f"{running_val_loss / (j + 1)}")
         running_val_loss /= len(val_loader)
         if prev_val_loss == 0:
             prev_val_loss = running_val_loss
             print('saving best model .... ')
-            torch.save(copy.deepcopy(Net.state_dict()), "saved_path/detector_training/best_model.pt")
+            torch.save(copy.deepcopy(Net.state_dict()), "../homoAdaptiter1.pt")
         if prev_val_loss > running_val_loss:
-            torch.save(copy.deepcopy(Net.state_dict()), "saved_path/detector_training/best_model.pt")
+            torch.save(copy.deepcopy(Net.state_dict()), "../homoAdaptiter1.pt")
             print('saving best model .... ')
             prev_val_loss = running_val_loss
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
-        writer.add_scalar('IoU', batch_iou, n_iter + 1)
-        writer.add_scalar('Val_IoU', val_batch_iou, n_iter + 1)
         for key, values in copy.deepcopy(Net.state_dict()).items():
             writer.add_histogram(key, values, n_iter + 1)
         writer.flush()

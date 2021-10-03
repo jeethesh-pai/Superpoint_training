@@ -2,9 +2,9 @@ data:
     dataset: 'TLSScanData'
     generate_label: false
     labels: true
-    label_path: '../pytorch-superpoint/datasets/TLS_Train/Label-20210914T161448Z-001/Label'
+    label_path: '../Dataset/Labels_MSCOCO'
     # labels: "logs/magicpoint_tls_labels/predictions"
-    root: '../pytorch-superpoint/datasets/MSCOCO' # datasets/COCO
+    root: '../Dataset/MSCOCO' # datasets/COCO
     detector_training: true
     gaussian_label:
         enable: true
@@ -66,7 +66,7 @@ model:
     batch_size: 4 # 32
     eval_batch_size: 2 # 32
     learning_rate: 0.001 # 0.0001
-    detection_threshold: 0.015 # 0.015
+    detection_threshold: 0.35 # 0.015
     lambda_loss: 1 # 1
     nms: 1
     dense_loss:
@@ -94,7 +94,7 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/superPointNet_170000_checkpoint.pth.tar"
+pretrained: "../magicpoint.pt"
 
 
 

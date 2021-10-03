@@ -625,7 +625,7 @@ def m_iou(target: torch.Tensor, output: torch.Tensor, det_threshold: float) -> f
 
 
 @torch.enable_grad()
-def detector_loss(target: torch.Tensor, output: torch.Tensor, det_threshold: float, mask=None) -> dict:
+def detector_loss(target: torch.Tensor, output: torch.Tensor, device='cpu', mask=None) -> dict:
     """
     returns detector loss based on softmax activation as given in De Tone Paper.
     target: target label (Shape should be (Batch_size, 1, Hc * cell_size, Wc * cell_size)
@@ -639,18 +639,19 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, det_threshold: flo
     if len(target.shape) == 3:
         target = target.unsqueeze(1)
     labels3D = labels2Dto3D(target, 8, add_dustbin=True)
-    iou = m_iou(labels2Dto3D(target, 8, add_dustbin=False), output, det_threshold=det_threshold)
+    # iou = m_iou(labels2Dto3D(target, 8, add_dustbin=False), output, det_threshold=det_threshold)
     labels3D = torch.argmax(labels3D, dim=1)
     # dustbin is true because of softmax activation in output
     CE_loss = torch.nn.CrossEntropyLoss(reduction='none')
-    entropy_loss = CE_loss(output, labels3D.to('cuda'))
+    entropy_loss = CE_loss(output, labels3D.to(device))
     mask3D = labels2Dto3D(mask, cell_size=8, add_dustbin=False).float()
-    mask3D = torch.prod(mask3D, dim=1).to('cuda')
+    mask3D = torch.prod(mask3D, dim=1).to(device)
     loss = torch.divide(torch.sum(entropy_loss * mask3D, dim=(1, 2)), torch.sum(mask3D + 1e-10, dim=(1, 2)))
     batch_mean_loss = torch.mean(loss)
     # add a small number to avoid division by zero
     #  return batch_mean_loss
-    return {'loss': batch_mean_loss, 'iou': iou}
+    # return {'loss': batch_mean_loss, 'iou': iou}
+    return {'loss': batch_mean_loss}
 
 
 def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,

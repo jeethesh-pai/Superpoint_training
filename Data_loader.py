@@ -50,7 +50,7 @@ class TLSScanData(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         # make sure label and image are of same size
         points, points_2D = None, None  # initialization to avoid warning
-        image = torch.from_numpy(cv2.resize(image, tuple(self.resize_shape), cv2.INTER_AREA))
+        image = cv2.resize(image, tuple(self.resize_shape), cv2.INTER_AREA)
         height, width = image.shape[0], image.shape[1]
         if self.config['data'].get('labels', False):
             points = np.load(os.path.join(self.label_path, self.image_list[index][:-3] + 'npy'))
@@ -61,7 +61,7 @@ class TLSScanData(Dataset):
             sample['label'] = points_2D
         if self.photometric:  # in photometric augmentations labels are unaffected
             aug = ImgAugTransform(**self.config['data']['augmentation'])
-            image = aug(image)
+            image = torch.from_numpy(aug(image))
         valid_mask = compute_valid_mask(image.shape, inv_homography=torch.eye(3))
         sample['valid_mask'] = valid_mask
         if self.homographic:
