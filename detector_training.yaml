@@ -2,7 +2,7 @@ data:
     dataset: 'TLSScanData'
     generate_label: false
     labels: true
-    label_path: '../Dataset/Labels_MSCOCO'
+    label_path: '../Dataset/Labels_MSCOCOIter1'
     # labels: "logs/magicpoint_tls_labels/predictions"
     root: '../Dataset/MSCOCO' # datasets/COCO
     detector_training: true
@@ -94,7 +94,7 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../magicpoint.pt"
+pretrained: "../homoAdaptiter2.pt"
 
 
 

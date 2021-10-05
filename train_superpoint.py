@@ -72,17 +72,19 @@ args = parser.parse_args()
 
 config_file_path = args.config
 with open(config_file_path) as path:
-    config = yaml.load(path)
+    config = yaml.full_load(path)
 batch_size = config['model']['batch_size']
 numHomIter = config['data']['augmentation']['homographic']['num']
 det_threshold = config['model']['detection_threshold']  # detection threshold to threshold the detector heatmap
 size = config['data']['preprocessing']['resize']  # width, height
 train_set = TLSScanData(transform=None, task='train', **config)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True,
-                                           prefetch_factor=4)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
+# train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True,
+#                                            prefetch_factor=4)
 val_set = TLSScanData(transform=None, task='validation', **config)
-val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True,
-                                         pin_memory=True, prefetch_factor=4)
+val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True)
+# val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True,
+#                                          pin_memory=True, prefetch_factor=4)
 Net = SuperPointNetBatchNorm()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
@@ -107,8 +109,10 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         running_loss = 0
         train_bar = tqdm.tqdm(train_loader)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is false here
-            # plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
-            # plt.show()
+            plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
+            plt.show()
+            plt.imshow(sample['label'][1, :, :].numpy().squeeze(), cmap='gray')
+            plt.show()
             sample['image'] = sample['image'].to(device)
             sample['label'] = sample['label'].to(device)
             optimizer.zero_grad()
@@ -170,17 +174,18 @@ else:  # start descriptor training with the homographically adapted model
     n_iter = 0
     prev_val_loss = 0
     old_state_dict = {}
+    new_state_dict = {}
     for key in Net.state_dict():
         old_state_dict[key] = Net.state_dict()[key].clone()
-    tot_params = sum(1 for _ in Net.parameters())
-    count = 0
-    for params in Net.parameters():
-        if count < 40:
-            params.requires_grad = False
-            count += 1
-    for params in Net.named_parameters():
-        if params[1].requires_grad is False:
-            print(params[0])
+    # tot_params = sum(1 for _ in Net.parameters())
+    # count = 0
+    # for params in Net.parameters():
+    #     if count < 40:
+    #         params.requires_grad = False
+    #         count += 1
+    # for params in Net.named_parameters():
+    #     if params[1].requires_grad is False:
+    #         print(params[0])
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
         running_loss, batch_iou = 0, 0
         train_bar = tqdm.tqdm(val_loader)
@@ -192,11 +197,10 @@ else:  # start descriptor training with the homographically adapted model
             # axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # plt.show()
-            if torch.cuda.is_available():
-                sample['image'] = sample['image'].to('cuda')
-                sample['label'] = sample['label'].to('cuda')
-                sample['warped_image'] = sample['warped_image'].to('cuda')
-                sample['warped_label'] = sample['warped_label'].to('cuda')
+            sample['image'] = sample['image'].to(device)
+            sample['label'] = sample['label'].to(device)
+            sample['warped_image'] = sample['warped_image'].to(device)
+            sample['warped_label'] = sample['warped_label'].to(device)
             optimizer.zero_grad()
             out = Net(sample['image'])
             out_warp = Net(sample['warped_image'])
@@ -217,31 +221,24 @@ else:  # start descriptor training with the homographically adapted model
             desc_loss.backward()
             # plot_grad_flow(Net.named_parameters())
             optimizer.step()
-            new_state_dict = {}
             running_loss += total_loss.item()
-            if i == 0:
-                batch_iou = det_loss['iou'] + det_warp_loss['iou']
-            else:
-                batch_iou += (det_loss['iou'] + det_warp_loss['iou']) / 2
-            train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)},"
-                                      f" IoU: {batch_iou}")
+            train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)}")
         # plt.show()
-        for key in Net.state_dict():
-            new_state_dict[key] = Net.state_dict()[key].clone()
-        for key in old_state_dict:
-            if not (old_state_dict[key] == new_state_dict[key]).all():
-                print('Diff in {}'.format(key))
-            else:
-                print('same old shit')
-        running_val_loss, val_batch_iou = 0, 0
+        # for key in Net.state_dict():
+        #     new_state_dict[key] = Net.state_dict()[key].clone()
+        # for key in old_state_dict:
+        #     if not (old_state_dict[key] == new_state_dict[key]).all():
+        #         print('Diff in {}'.format(key))
+        #     else:
+        #         print('same old shit')
+        running_val_loss= 0,
         val_bar = tqdm.tqdm(val_loader)
         Net.train(mode=False)
         for j, val_sample in enumerate(val_bar):
-            if torch.cuda.is_available():
-                val_sample['image'] = val_sample['image'].to('cuda')
-                val_sample['label'] = val_sample['label'].to('cuda')
-                val_sample['warped_image'] = val_sample['warped_image'].to('cuda')
-                val_sample['warped_label'] = val_sample['warped_label'].to('cuda')
+            val_sample['image'] = val_sample['image'].to(device)
+            val_sample['label'] = val_sample['label'].to(device)
+            val_sample['warped_image'] = val_sample['warped_image'].to(device)
+            val_sample['warped_label'] = val_sample['warped_label'].to(device)
             with torch.no_grad():
                 out = Net(val_sample['image'])
                 out_warp = Net(val_sample['warped_image'])
@@ -257,25 +254,19 @@ else:  # start descriptor training with the homographically adapted model
                                               valid_mask=val_sample['warped_mask'])
                 total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss
                 running_val_loss += total_loss.item()
-                if j == 0:
-                    val_batch_iou = det_loss['iou'] + det_warp_loss['iou']
-                else:
-                    val_batch_iou += (det_loss['iou'] + det_warp_loss['iou']) / 2
                 val_bar.set_description(f"Validation -- Epoch- {n_iter + 1} / {max_iter} - Validation loss: "
-                                        f"{running_val_loss / (j + 1)}, Validation IoU: {val_batch_iou}")
+                                        f"{running_val_loss / (j + 1)}")
         running_val_loss /= len(val_loader)
         if prev_val_loss == 0:
             prev_val_loss = running_val_loss
             print('saving best model .... ')
-            torch.save(copy.deepcopy(Net.state_dict()), "saved_path/joint_training/best_model.pt")
+            torch.save(copy.deepcopy(Net.state_dict()), "../descriptorTrainingAfterIter2.pt")
         if prev_val_loss > running_val_loss:
-            torch.save(copy.deepcopy(Net.state_dict()), "saved_path/joint_training/best_model.pt")
+            torch.save(copy.deepcopy(Net.state_dict()), "../descriptorTrainingAfterIter2.pt")
             print('saving best model .... ')
             prev_val_loss = running_val_loss
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
-        writer.add_scalar('IoU', batch_iou, n_iter + 1)
-        writer.add_scalar('Val_IoU', val_batch_iou, n_iter + 1)
         for name, weight in Net.named_parameters():
             writer.add_histogram(name, weight, n_iter + 1)
             writer.add_histogram(f'{name}.grad', weight.grad, n_iter + 1)
