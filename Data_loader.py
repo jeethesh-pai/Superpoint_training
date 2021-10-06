@@ -69,6 +69,10 @@ class TLSScanData(Dataset):
             # use inverse of homography as we have initial points which needs to be homographically augmented
             homographies = np.stack([self.sample_homography(np.array([2, 2]), shift=-1, **self.warped_pair_params)
                                      for i in range(num_iter)])  # actual homography
+            if np.prod(np.linalg.det(homographies)) == 0:
+                while np.prod(np.linalg.det(homographies)) != 0:
+                    homographies = np.stack([self.sample_homography(np.array([2, 2]), shift=-1,
+                                                                    **self.warped_pair_params) for i in range(num_iter)])
             # homographies[0, :, :] = torch.ones(size=(3, 3), dtype=torch.float32)  # As per the paper.
             inv_homography = torch.as_tensor([inv(homography) for homography in homographies], dtype=torch.float32)
             # warped_image = warp_image(image, inv_homography)
