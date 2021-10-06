@@ -94,4 +94,5 @@ if config['data']['generate_label']:
                 plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
                                         img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
                 plt.show()
-                np.save(filename, pts)
+                print('something')
+                # np.save(filename, pts)

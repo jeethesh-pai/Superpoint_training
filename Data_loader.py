@@ -61,9 +61,10 @@ class TLSScanData(Dataset):
             sample['label'] = points_2D
         if self.photometric:  # in photometric augmentations labels are unaffected
             aug = ImgAugTransform(**self.config['data']['augmentation'])
-            image = torch.from_numpy(aug(image))
+            image = aug(image)
         valid_mask = compute_valid_mask(image.shape, inv_homography=torch.eye(3))
         sample['valid_mask'] = valid_mask
+        image = torch.from_numpy(image)
         if self.homographic:
             num_iter = self.config['data']['augmentation']['homographic']['num']
             # use inverse of homography as we have initial points which needs to be homographically augmented
