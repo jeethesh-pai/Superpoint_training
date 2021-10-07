@@ -78,7 +78,7 @@ numHomIter = config['data']['augmentation']['homographic']['num']
 det_threshold = config['model']['detection_threshold']  # detection threshold to threshold the detector heatmap
 size = config['data']['preprocessing']['resize']  # width, height
 train_set = TLSScanData(transform=None, task='train', **config)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=False)
 # train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True,
 #                                            prefetch_factor=4)
 val_set = TLSScanData(transform=None, task='validation', **config)
@@ -109,10 +109,10 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         running_loss = 0
         train_bar = tqdm.tqdm(train_loader)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is false here
-            plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
-            plt.show()
-            plt.imshow(sample['label'][1, :, :].numpy().squeeze(), cmap='gray')
-            plt.show()
+            # plt.imshow(sample['label'][0, :, :].numpy().squeeze(), cmap='gray')
+            # plt.show()
+            # plt.imshow(sample['label'][1, :, :].numpy().squeeze(), cmap='gray')
+            # plt.show()
             sample['image'] = sample['image'].to(device)
             sample['label'] = sample['label'].to(device)
             optimizer.zero_grad()
@@ -168,7 +168,7 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         n_iter += 1
 else:  # start descriptor training with the homographically adapted model
     writer = SummaryWriter(log_dir="logs/descriptor_training")
-    writer.add_graph(Net, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).cuda())
+    writer.add_graph(wrappedModel, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).to(device))
     max_iter = config['train_iter']  # also called as epochs
     det_threshold = config['model']['detection_threshold']
     n_iter = 0
@@ -187,13 +187,13 @@ else:  # start descriptor training with the homographically adapted model
     #     if params[1].requires_grad is False:
     #         print(params[0])
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
-        running_loss, batch_iou = 0, 0
-        train_bar = tqdm.tqdm(val_loader)
+        running_loss = 0
+        train_bar = tqdm.tqdm(train_loader)
         Net.train(mode=True)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is set to true here
             # fig, axes = plt.subplots(2, 2)
-            # axes[0, 0].imshow(sample['image'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
-            # axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[0, 0].imshow(sample['valid_mask'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
+            # axes[1, 0].imshow(sample['warped_mask'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # plt.show()
@@ -207,18 +207,16 @@ else:  # start descriptor training with the homographically adapted model
             semi, desc = out['semi'], out['desc']
             semi_warped, desc_warp = out_warp['semi'], out_warp['desc']
             # det_loss = detector_loss_2(sample['label'], semi, det_threshold=det_threshold)
-            det_loss = detector_loss(sample['label'], semi, det_threshold=det_threshold)
-            det_warp_loss = detector_loss(sample['label'], semi_warped, det_threshold)
+            det_loss = detector_loss(sample['label'], semi, device=device)
+            det_warp_loss = detector_loss(sample['warped_label'], semi_warped, device= device)
             desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['homography'],
                                           margin_neg=config['model']['negative_margin'],
                                           margin_pos=config['model']['positive_margin'],
                                           lambda_d=config['model']['lambda_d'],
                                           threshold=config['model']['descriptor_dist'],
-                                          valid_mask=sample['warped_mask'])
+                                          valid_mask=None)
             total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss
-            det_total_loss = det_loss['loss'] + det_warp_loss['loss']
-            det_total_loss.backward()
-            desc_loss.backward()
+            total_loss.backward()
             # plot_grad_flow(Net.named_parameters())
             optimizer.step()
             running_loss += total_loss.item()
@@ -231,7 +229,7 @@ else:  # start descriptor training with the homographically adapted model
         #         print('Diff in {}'.format(key))
         #     else:
         #         print('same old shit')
-        running_val_loss= 0,
+        running_val_loss = 0
         val_bar = tqdm.tqdm(val_loader)
         Net.train(mode=False)
         for j, val_sample in enumerate(val_bar):
@@ -267,9 +265,9 @@ else:  # start descriptor training with the homographically adapted model
             prev_val_loss = running_val_loss
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
-        for name, weight in Net.named_parameters():
-            writer.add_histogram(name, weight, n_iter + 1)
-            writer.add_histogram(f'{name}.grad', weight.grad, n_iter + 1)
+        # for name, weight in Net.named_parameters():
+        #     writer.add_histogram(name, weight, n_iter + 1)
+        #     writer.add_histogram(f'{name}.grad', weight.grad, n_iter + 1)
         writer.flush()
         n_iter += 1
     writer.close()
