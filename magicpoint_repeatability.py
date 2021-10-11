@@ -4,6 +4,7 @@ from Synthetic_dataset_loader import SyntheticDataset
 from model_loader import SuperPointNet, load_model, detector_post_processing, SuperPointNet_gauss2, SuperPointNetBatchNorm
 from utils import flattenDetection, warpLabels, get_grid, filter_points, warp_image, nms_fast
 from torchsummary import summary
+from Data_loader import TLSScanData
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -100,7 +101,7 @@ def compute_tp_fp(prediction, gt, prob_threshold=[0.015, 0.5], correct_distance=
 
 parser = argparse.ArgumentParser(description="This scripts helps to evaluate detector using different metrics")
 parser.add_argument('--config', help='Path to config file',
-                    default="../my_superpoint_pytorch/evaluation_config.yaml")
+                    default="evaluation_config.yaml")
 parser.add_argument('--epsilon',  help='threshold distance used to calculate repeatability', default=1, type=int)
 args = parser.parse_args()
 config_file_path = args.config
@@ -108,45 +109,42 @@ with open(config_file_path) as path:
     config = yaml.load(path)
 size = config['data']['preprocessing']['resize']
 epsilon = config['model']['epsilon']
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 model = SuperPointNetBatchNorm()
-model_weights = torch.load(config['pretrained'])
+model_weights = torch.load(config['pretrained'], map_location=device)
 model.load_state_dict(model_weights)
 batch_size = config['model']['batch_size']
-model.to('cuda')
+model.to(device)
 summary(model, input_size=(1, size[0], size[1]))
-data_set = SyntheticDataset(transform=None, task='test', **config)
+# data_set = SyntheticDataset(transform=None, task='test', **config)
+data_set = TLSScanData(transform=None, task='val', **config)
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=False)
 tqdm_bar = tqdm.tqdm(data_loader)
-thresh = [0.015, 0.1, 0.25, 0.35, 0.5, 0.75]
+thresh = [0.015, 0.15, 0.25, 0.35, 0.45, 0.5, 0.65, 0.75]
 repeat_metric_list, loc_error = [], []
 fp_array, tp_array = np.zeros_like(thresh), np.zeros_like(thresh)
 gt = 0
+count = 0
 model.train(mode=False)
 for count, sample in enumerate(tqdm_bar):
+    sample['image'] = sample['image'].to(device)
     if count > 1000:
         break
-    if torch.cuda.is_available():
-        # plt.imshow(sample['label'].squeeze(), cmap='gray')
-        # plt.show()
-        sample['image'] = sample['image'].to('cuda')
     with torch.no_grad():
         output = model(sample['image'])
         semi = output['semi']
         pred = detector_post_processing(semi, ret_heatmap=True)
         # plt.imshow(pred, cmap='gray')
         # plt.show()
-        keypoints = detector_post_processing(semi, conf_threshold=0.015, NMS_dist=4, limit_detection=600)
-        keypoints = keypoints[:2, :].reshape(-1, 2)
-        gt_keypoint_2d = sample['label'].squeeze()
-        gt_keypoint = np.nonzero(gt_keypoint_2d)
         # repeat_metric_list.append(repeatability(gt_keypoint, keypoints))
         # loc_error.append(localization_error(pred, sample['label'].numpy().squeeze()))
         true_positive, false_positive, ground_truth = compute_tp_fp(pred, sample['label'].numpy().squeeze(),
-                                                                    prob_threshold=thresh)
+                                                                    prob_threshold=thresh, correct_distance=5)
         tp_array += true_positive
         fp_array += false_positive
         gt += ground_truth
     tqdm_bar.set_description(f"Evaluation of Detector - mAP check")
+    count += 1
 recall = tp_array / gt
 precision = tp_array / (tp_array + fp_array)
 f1 = 2 * np.divide(precision * recall, (precision + recall))
@@ -157,6 +155,8 @@ plt.plot(recall, precision)
 plt.show()
 recall = np.concatenate([[0], recall])
 AP = np.sum(precision * (recall[1:] - recall[:-1]))
+print(f"Threshold range:{thresh}")
+print(f'Max. F1 score for the threshold: {thresh[np.argmax(f1)]} from F1 score {f1}')
 print(AP)
 
 

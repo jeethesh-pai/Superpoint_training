@@ -1,7 +1,17 @@
 data:
-    root: '../Dataset/MSCOCO' # # /content/drive/MyDrive
+    dataset: 'HPatches'
+    generate_label: false
     labels: true
-    label_path: '../Dataset/Labels_MSCOCOIter2'  # /content/drive/MyDrive/Label
+    label_path: '../Dataset/HPatches'  # /content/drive/MyDrive/Label
+    # labels: "logs/magicpoint_tls_labels/predictions"
+    root: '../Dataset/HPatches' # # /content/drive/MyDrive
+    detector_training: false # descriptor training if false
+    gaussian_label:
+        enable: true
+        sigma: 1.0
+        params:
+            GaussianBlur: {sigma: 0.2}
+    cache_in_memory: false
     preprocessing:
         resize: [320, 216]  # width, height
         # resize: [480, 640]
@@ -21,7 +31,7 @@ data:
                     kernel_size_range: [100, 150]
                 motion_blur: {max_kernel_size: 3}
         homographic:
-            enable: false
+            enable: true
             num: 1 # 100
             aggregation: 'sum'
             filter_counts: 0
@@ -40,11 +50,19 @@ data:
         valid_border_margin: 3
 
 model:
-    batch_size: 1 # 32
-    detection_threshold: 0.015 # 0.015
+    batch_size: 2 # 32
+    eval_batch_size: 2 # 32
+    learning_rate: 0.001 # 0.0001
+    detection_threshold: 0.35 # 0.015
     nms: 1
     descriptor_dist: 8 # 4, 7.5
-    epsilon: 3
+    lambda_d: 250 # 800
+    positive_margin: 1
+    negative_margin: 0.2
+    lambda_loss: 0.1 # 1
+
+reset_iter: True # set true to set the iteration number to 0
+train_iter: 20 # 170000
 
 pretrained: "../homoAdaptiter2.pt"
 

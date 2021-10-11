@@ -56,7 +56,7 @@ class TLSScanData(Dataset):
             points = np.load(os.path.join(self.label_path, self.image_list[index][:-3] + 'npy'))
             # points_y, points_x = point_erode(points)
             # points = np.asarray(list(zip(points_y, points_x)))
-            points_2D = points_to_2D(points, height, width, img=image)
+            points_2D = points_to_2D(points, height, width, img=None)
             points_2D = torch.tensor(points_2D, dtype=torch.float32).unsqueeze(0)
             sample['label'] = points_2D
         if self.photometric:  # in photometric augmentations labels are unaffected
@@ -79,7 +79,7 @@ class TLSScanData(Dataset):
             # warped_image = warp_image(image, inv_homography)
             warped_image = (torch.cat([image.unsqueeze(0)]*num_iter, dim=0) / 255.0).type(torch.float32)
             sample['warped_image'] = inv_warp_image_batch(warped_image.unsqueeze(1), mode='bilinear',
-                                                          mat_homo_inv=inv_homography.unsqueeze(0)).unsqueeze(0)
+                                                          mat_homo_inv=inv_homography).unsqueeze(0)
             sample['warped_mask'] = compute_valid_mask(torch.tensor([height, width]), inv_homography=inv_homography)
             sample['homography'] = torch.from_numpy(homographies).type(torch.float32)
             sample['inv_homography'] = inv_homography

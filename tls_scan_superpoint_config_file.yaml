@@ -2,7 +2,7 @@ data:
     dataset: 'TLSScanData'
     generate_label: true
     labels: false
-    label_path: '../Dataset/MSCOCO/Labels_MSCOCOIter1'  # /content/drive/MyDrive/Label
+    label_path: '../Dataset/MSCOCO/Labels_MSCOCOIter2'  # /content/drive/MyDrive/Label
     # labels: "logs/magicpoint_tls_labels/predictions"
     root: '../Dataset/MSCOCO' # /content/drive/MyDrive
     detector_training: false
