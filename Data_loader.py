@@ -4,7 +4,7 @@ import numpy as np
 from torch.utils.data import Dataset
 import os
 from photometric import ImgAugTransform
-from utils import compute_valid_mask, sample_homography, warpLabels, warp_image
+from utils import compute_valid_mask, sample_homography, warpLabels, warp_image, inv_warp_image_batch
 from numpy.linalg import inv
 
 
@@ -50,7 +50,7 @@ class TLSScanData(Dataset):
         image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         # make sure label and image are of same size
         points, points_2D = None, None  # initialization to avoid warning
-        image = cv2.resize(image, tuple(self.resize_shape), cv2.INTER_CUBIC)
+        image = cv2.resize(image, tuple(self.resize_shape), cv2.INTER_AREA)
         height, width = image.shape[0], image.shape[1]
         if self.config['data'].get('labels', False):
             points = np.load(os.path.join(self.label_path, self.image_list[index][:-3] + 'npy'))
@@ -62,32 +62,33 @@ class TLSScanData(Dataset):
         if self.photometric:  # in photometric augmentations labels are unaffected
             aug = ImgAugTransform(**self.config['data']['augmentation'])
             image = aug(image)
-        valid_mask = compute_valid_mask(image.shape, inv_homography=np.eye(3))
+        valid_mask = compute_valid_mask(image.shape, inv_homography=torch.eye(3))
         sample['valid_mask'] = valid_mask
+        image = torch.from_numpy(image)
         if self.homographic:
             num_iter = self.config['data']['augmentation']['homographic']['num']
             # use inverse of homography as we have initial points which needs to be homographically augmented
             homographies = np.stack([self.sample_homography(np.array([2, 2]), shift=-1, **self.warped_pair_params)
                                      for i in range(num_iter)])  # actual homography
+            if np.prod(np.linalg.det(homographies)) == 0:
+                while np.prod(np.linalg.det(homographies)) != 0:
+                    homographies = np.stack([self.sample_homography(np.array([2, 2]), shift=-1,
+                                                                    **self.warped_pair_params) for i in range(num_iter)])
             # homographies[0, :, :] = torch.ones(size=(3, 3), dtype=torch.float32)  # As per the paper.
-            inv_homography = np.asarray([inv(homography) for homography in homographies])  # inv_homography
-            warped_image = warp_image(image, inv_homography)
-            sample['warped_image'] = (warped_image / 255.0).astype(np.float32)
-            valid_mask = compute_valid_mask(torch.tensor([height, width]), inv_homography=inv_homography)
-            sample['warped_mask'] = valid_mask
-            sample['homography'] = homographies.astype(np.float32)
+            inv_homography = torch.as_tensor([inv(homography) for homography in homographies], dtype=torch.float32)
+            # warped_image = warp_image(image, inv_homography)
+            warped_image = (torch.cat([image.unsqueeze(0)]*num_iter, dim=0) / 255.0).type(torch.float32)
+            sample['warped_image'] = inv_warp_image_batch(warped_image.unsqueeze(1), mode='bilinear',
+                                                          mat_homo_inv=inv_homography).unsqueeze(0)
+            sample['warped_mask'] = compute_valid_mask(torch.tensor([height, width]), inv_homography=inv_homography)
+            sample['homography'] = torch.from_numpy(homographies).type(torch.float32)
             sample['inv_homography'] = inv_homography
             if self.config['data'].get('labels', False):
-                warped_points_2D = np.zeros((inv_homography.shape[0], image.shape[0], image.shape[1]))
-                warped_points = warpLabels(points, homographies, height, width)
-                if num_iter == 1:
-                    warped_points_2D[0, :, :] = points_to_2D(warped_points, height, width, img=None)
-                else:
-                    for i in range(inv_homography.shape[0]):
-                        warped_points_2D[i, :, :] = points_to_2D(warped_points[i], height, width, img=warped_image[i, ...])
-                warped_points_2D = torch.tensor(warped_points_2D, dtype=torch.float32)
-                sample['warped_label'] = warped_points_2D
-        sample['image'] = (image[np.newaxis, :, :] / 255.0).astype(np.float32)
+                warped_points_2D = torch.stack([sample['label']]*num_iter, dim=0)
+                # warped_points = warpLabels(points, homographies, height, width)
+                warped_points_2D = inv_warp_image_batch(warped_points_2D, sample['inv_homography']).type(torch.float32)
+                sample['warped_label'] = warped_points_2D.unsqueeze(0)
+        sample['image'] = (image.unsqueeze(0) / 255.0).type(torch.float32)
         sample['name'] = self.image_list[index]
         return sample
 
