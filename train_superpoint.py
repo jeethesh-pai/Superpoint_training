@@ -78,7 +78,7 @@ numHomIter = config['data']['augmentation']['homographic']['num']
 det_threshold = config['model']['detection_threshold']  # detection threshold to threshold the detector heatmap
 size = config['data']['preprocessing']['resize']  # width, height
 train_set = TLSScanData(transform=None, task='train', **config)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=False)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=False, prefetch_factor=2)
 # train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True,
 #                                            prefetch_factor=4)
 val_set = TLSScanData(transform=None, task='validation', **config)
@@ -192,8 +192,8 @@ else:  # start descriptor training with the homographically adapted model
         Net.train(mode=True)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is set to true here
             # fig, axes = plt.subplots(2, 2)
-            # axes[0, 0].imshow(sample['valid_mask'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
-            # axes[1, 0].imshow(sample['warped_mask'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[0, 0].imshow(sample['image'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
+            # axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # plt.show()
@@ -206,7 +206,6 @@ else:  # start descriptor training with the homographically adapted model
             out_warp = Net(sample['warped_image'])
             semi, desc = out['semi'], out['desc']
             semi_warped, desc_warp = out_warp['semi'], out_warp['desc']
-            # det_loss = detector_loss_2(sample['label'], semi, det_threshold=det_threshold)
             det_loss = detector_loss(sample['label'], semi, device=device)
             det_warp_loss = detector_loss(sample['warped_label'], semi_warped, device= device)
             desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['homography'],

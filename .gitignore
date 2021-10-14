@@ -3,3 +3,4 @@ __pycache__/
 colab_log/
 /Remote_log/
 /venv
+.idea

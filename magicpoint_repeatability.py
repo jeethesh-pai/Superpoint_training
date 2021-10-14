@@ -1,11 +1,11 @@
 import torch
 import yaml
 from Synthetic_dataset_loader import SyntheticDataset
-from model_loader import SuperPointNet, load_model, detector_post_processing, SuperPointNet_gauss2, SuperPointNetBatchNorm
-from utils import flattenDetection, warpLabels, get_grid, filter_points, warp_image, nms_fast
+from HPatches_dataset import HPatches
+from model_loader import detector_post_processing, SuperPointNetBatchNorm, semi_to_heatmap
 from torchsummary import summary
 from Data_loader import TLSScanData
-import os
+from utils import inv_warp_image_batch, getPtsFromHeatmap
 import numpy as np
 import matplotlib.pyplot as plt
 import tqdm
@@ -101,8 +101,10 @@ def compute_tp_fp(prediction, gt, prob_threshold=[0.015, 0.5], correct_distance=
 
 parser = argparse.ArgumentParser(description="This scripts helps to evaluate detector using different metrics")
 parser.add_argument('--config', help='Path to config file',
-                    default="evaluation_config.yaml")
+                    default="HPatches_config.yaml")
 parser.add_argument('--epsilon',  help='threshold distance used to calculate repeatability', default=1, type=int)
+parser.add_argument('--repeatability',  help='Whether to calculate repeatability', default=True, type=bool)
+parser.add_argument('--mAP',  help='whether to calculate mAP', default=False, type=bool)
 args = parser.parse_args()
 config_file_path = args.config
 with open(config_file_path) as path:
@@ -117,46 +119,72 @@ batch_size = config['model']['batch_size']
 model.to(device)
 summary(model, input_size=(1, size[0], size[1]))
 # data_set = SyntheticDataset(transform=None, task='test', **config)
-data_set = TLSScanData(transform=None, task='val', **config)
+data_set = HPatches(transform=None, **config)
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=False)
 tqdm_bar = tqdm.tqdm(data_loader)
-thresh = [0.015, 0.15, 0.25, 0.35, 0.45, 0.5, 0.65, 0.75]
-repeat_metric_list, loc_error = [], []
-fp_array, tp_array = np.zeros_like(thresh), np.zeros_like(thresh)
-gt = 0
-count = 0
-model.train(mode=False)
-for count, sample in enumerate(tqdm_bar):
-    sample['image'] = sample['image'].to(device)
-    if count > 1000:
-        break
-    with torch.no_grad():
-        output = model(sample['image'])
-        semi = output['semi']
-        pred = detector_post_processing(semi, ret_heatmap=True)
-        # plt.imshow(pred, cmap='gray')
-        # plt.show()
-        # repeat_metric_list.append(repeatability(gt_keypoint, keypoints))
-        # loc_error.append(localization_error(pred, sample['label'].numpy().squeeze()))
-        true_positive, false_positive, ground_truth = compute_tp_fp(pred, sample['label'].numpy().squeeze(),
-                                                                    prob_threshold=thresh, correct_distance=5)
-        tp_array += true_positive
-        fp_array += false_positive
-        gt += ground_truth
-    tqdm_bar.set_description(f"Evaluation of Detector - mAP check")
-    count += 1
-recall = tp_array / gt
-precision = tp_array / (tp_array + fp_array)
-f1 = 2 * np.divide(precision * recall, (precision + recall))
-sortIdx = np.argsort(recall)
-recall = recall[sortIdx]
-precision = precision[sortIdx]
-plt.plot(recall, precision)
-plt.show()
-recall = np.concatenate([[0], recall])
-AP = np.sum(precision * (recall[1:] - recall[:-1]))
-print(f"Threshold range:{thresh}")
-print(f'Max. F1 score for the threshold: {thresh[np.argmax(f1)]} from F1 score {f1}')
-print(AP)
+if args.mAP:
+    thresh = [0.015, 0.15, 0.25, 0.35, 0.45, 0.5, 0.65, 0.75]
+    fp_array, tp_array = np.zeros_like(thresh), np.zeros_like(thresh)
+    gt = 0
+    count = 0
+    model.train(mode=False)
+    for count, sample in enumerate(tqdm_bar):
+        sample['image'] = sample['image'].to(device)
+        with torch.no_grad():
+            output = model(sample['image'])
+            semi = output['semi']
+            pred = detector_post_processing(semi, ret_heatmap=True)
+            # plt.imshow(pred, cmap='gray')
+            # plt.show()
+            # repeat_metric_list.append(repeatability(gt_keypoint, keypoints))
+            # loc_error.append(localization_error(pred, sample['label'].numpy().squeeze()))
+            true_positive, false_positive, ground_truth = compute_tp_fp(pred, sample['label'].numpy().squeeze(),
+                                                                        prob_threshold=thresh, correct_distance=5)
+            tp_array += true_positive
+            fp_array += false_positive
+            gt += ground_truth
+        tqdm_bar.set_description(f"Evaluation of Detector - mAP check")
+        count += 1
+    recall = tp_array / gt
+    precision = tp_array / (tp_array + fp_array)
+    f1 = 2 * np.divide(precision * recall, (precision + recall))
+    sortIdx = np.argsort(recall)
+    recall = recall[sortIdx]
+    precision = precision[sortIdx]
+    plt.plot(recall, precision)
+    plt.show()
+    recall = np.concatenate([[0], recall])
+    AP = np.sum(precision * (recall[1:] - recall[:-1]))
+    print(f"Threshold range:{thresh}")
+    print(f'Max. F1 score for the threshold: {thresh[np.argmax(f1)]} from F1 score {f1}')
+    print(AP)
+elif args.repeatability:
+    repeat_metric_list, loc_error_list = [], []
+    model.train(mode=False)
+    repeat_mean = []
+    nms = config['model']['nms']
+    conf_threshold = config['model']['detection_threshold']
+    for count, sample in enumerate(tqdm_bar):
+        sample['image'] = sample['image'].to(device)
+        sample['homography'] = sample['homography'].to(device)
+        sample['inv_homography'] = sample['inv_homography'].to(device)
+        with torch.no_grad():
+            output = model(sample['image'].squeeze(0))
+            semi = output['semi']
+            heatmap = semi_to_heatmap(semi)
+            heatmap[1:, ...] = inv_warp_image_batch(heatmap[1:, ...], sample['homography'][0, 1:, ...].squeeze(),
+                                                    device=device)
+            keypoints = [getPtsFromHeatmap(heatmap[i, ...].squeeze(), nms_dist=nms,
+                                           conf_thresh=conf_threshold, limit_detection=300) for i in range(semi.shape[0])]
+            keypoints = [np.asarray(list(zip(pts[1], pts[0])), dtype=np.int) for pts in keypoints]
+            try:
+                repeat_metric_list = [repeatability(keypoints[0], keypoints[i],
+                                                    correct_distance=epsilon) for i in range(1, len(keypoints))]
+            except IndexError:
+                print(sample['name'])
+            repeat_mean_batch = np.mean(repeat_metric_list)
+            repeat_mean.append(repeat_mean_batch)
+            tqdm_bar.set_description(f"Repeatability - @ NMS-{nms} & Correct Distance - "
+                                     f"{epsilon} = {np.mean(repeat_mean)}")
 
 

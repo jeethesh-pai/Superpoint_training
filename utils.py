@@ -579,19 +579,19 @@ def denormPts(pts, shape):
     return pts
 
 
-def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
+def getPtsFromHeatmap(heatmap, conf_thresh=0.35, nms_dist=1, limit_detection=600):
     """
     :param nms_dist: distance to be applied for non maximal suppression
     :param heatmap:
         np (H, W)
     :param conf_thresh: threshold for detection
+    :param limit_detection: number of detections maximum allowed
     :return:
     """
 
     border_remove = 4
     H, W = heatmap.shape[0], heatmap.shape[1]
     xs, ys = np.where(heatmap >= conf_thresh)  # Confidence threshold.
-    sparsemap = (heatmap >= conf_thresh)
     if len(xs) == 0:
         return np.zeros((3, 0))
     pts = np.zeros((3, len(xs)))  # Populate point data sized 3xN.
@@ -607,6 +607,8 @@ def getPtsFromHeatmap(heatmap, conf_thresh, nms_dist):
     toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
     toremove = np.logical_or(toremoveW, toremoveH)
     pts = pts[:, ~toremove]
+    if pts.shape[1] > limit_detection:
+        pts = pts[:, :limit_detection]
     return pts
 
 

@@ -50,16 +50,17 @@ data:
         valid_border_margin: 3
 
 model:
-    batch_size: 2 # 32
+    batch_size: 1 # 32
     eval_batch_size: 2 # 32
     learning_rate: 0.001 # 0.0001
     detection_threshold: 0.35 # 0.015
-    nms: 1
+    nms: 3
     descriptor_dist: 8 # 4, 7.5
     lambda_d: 250 # 800
     positive_margin: 1
     negative_margin: 0.2
     lambda_loss: 0.1 # 1
+    epsilon: 3
 
 reset_iter: True # set true to set the iteration number to 0
 train_iter: 20 # 170000
