@@ -3,7 +3,7 @@ import yaml
 from Data_loader import TLSScanData
 from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm
 import torch.optim as optim
-from utils import detector_loss, descriptor_loss_2
+from utils import detector_loss, descriptor_loss_2, descriptor_loss_3
 from torchsummary import summary
 import copy
 from collections import namedtuple
@@ -80,11 +80,12 @@ size = config['data']['preprocessing']['resize']  # width, height
 train_set = TLSScanData(transform=None, task='train', **config)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=False, prefetch_factor=2)
 # train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, pin_memory=True,
-#                                            prefetch_factor=4)
+#                                            prefetch_factor=4, num_workers=1)
 val_set = TLSScanData(transform=None, task='validation', **config)
-val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True)
+val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=False,
+                                         prefetch_factor=2)
 # val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=True,
-#                                          pin_memory=True, prefetch_factor=4)
+#                                          pin_memory=True, prefetch_factor=4, num_workers=1)
 Net = SuperPointNetBatchNorm()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
@@ -214,7 +215,13 @@ else:  # start descriptor training with the homographically adapted model
                                           lambda_d=config['model']['lambda_d'],
                                           threshold=config['model']['descriptor_dist'],
                                           valid_mask=None)
-            total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss
+            desc_loss_2 = descriptor_loss_3(desc, desc_warp, homography=sample['homography'],
+                                            margin_neg=config['model']['negative_margin'],
+                                            margin_pos=config['model']['positive_margin'],
+                                            lambda_d=config['model']['lambda_d'],
+                                            threshold=config['model']['descriptor_dist'],
+                                            valid_mask=None)
+            total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss_2
             total_loss.backward()
             # plot_grad_flow(Net.named_parameters())
             optimizer.step()

@@ -675,6 +675,7 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     mask3D = torch.prod(mask3D, dim=1).to(device)
     cell_dist = np.linalg.norm(coords - warped_coord, axis=-1)
     mask = cell_dist <= threshold
+    count_true = np.count_nonzero(mask)
     mask = torch.from_numpy(mask.astype(np.float32)).reshape([batch_size, Hc * Wc, Hc * Wc]).to(device)
     new_desc = descriptor.reshape((batch_size, -1, size))
     new_warp_descriptor = descriptor_warped.reshape((batch_size, -1, size))
@@ -684,7 +685,36 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
                               torch.zeros_like(desc_product))
     loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr) * mask3D.reshape([batch_size, 1, -1])
-    return loss_desc.sum() / ((mask3D.sum()**2) * batch_size)
+    return torch.mean(torch.sum(loss_desc, dim=(1, 2)) / (Hc*Wc)**2)
+
+
+def descriptor_loss_3(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,
+                      lambda_d: float, margin_pos: float, margin_neg: float, threshold=8, valid_mask=None) -> \
+        torch.Tensor:
+    batch_size, size, Hc, Wc = descriptor_warped.shape
+    H, W = Hc * 8, Wc * 8
+    valid_mask = torch.ones(size=(batch_size, H, W)) if valid_mask is None else valid_mask
+    if len(valid_mask.shape) == 3:
+        valid_mask = valid_mask.unsqueeze(1)
+    coords = torch.stack(torch.meshgrid(torch.linspace(0, Wc, Wc), torch.linspace(0, Hc, Hc)), dim=2)  # coordinates of Hc, Wc  grid
+    coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
+    coords = coords.transpose(1, 0).reshape([-1, 2])
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    warped_coord = warp_points(coords, homography).reshape([batch_size, -1, 2])
+    coords = torch.cat([coords.unsqueeze(0)]*batch_size, dim=0)
+    cell_dist = torch.linalg.norm(coords - warped_coord, dim=-1)
+    mask = (cell_dist <= threshold).to(device).type(torch.float32)
+    count_true = torch.count_nonzero(mask)
+    new_desc = descriptor.reshape((batch_size, -1, 1, size))
+    new_warp_descriptor = descriptor_warped.reshape((batch_size, -1, size, 1))
+    desc_product = torch.matmul(new_desc, new_warp_descriptor).squeeze()
+    positive_corr = torch.max(margin_pos * torch.ones_like(desc_product) - desc_product,
+                              torch.zeros_like(desc_product))
+    negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
+                              torch.zeros_like(desc_product))
+    loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr)
+    loss = torch.sum(loss_desc, dim=1) / (Hc*Wc)
+    return torch.mean(torch.sum(loss_desc, dim=1) / (Hc*Wc))
 
 
 def descriptor_loss(descriptors, descriptors_warped, homographies, mask_valid=None, cell_size=8, lamda_d=250,
