@@ -195,8 +195,8 @@ else:  # start descriptor training with the homographically adapted model
             # fig, axes = plt.subplots(2, 2)
             # axes[0, 0].imshow(sample['image'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
             # axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            # axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            # axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[0, 1].imshow(sample['valid_mask'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[1, 1].imshow(sample['warped_mask'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # plt.show()
             sample['image'] = sample['image'].to(device)
             sample['label'] = sample['label'].to(device)
@@ -209,24 +209,17 @@ else:  # start descriptor training with the homographically adapted model
             semi_warped, desc_warp = out_warp['semi'], out_warp['desc']
             det_loss = detector_loss(sample['label'], semi, device=device)
             det_warp_loss = detector_loss(sample['warped_label'], semi_warped, device=device)
-            # desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['homography'],
-            #                               margin_neg=config['model']['negative_margin'],
-            #                               margin_pos=config['model']['positive_margin'],
-            #                               lambda_d=config['model']['lambda_d'],
-            #                               threshold=config['model']['descriptor_dist'],
-            #                               valid_mask=None)
-            desc_loss_2 = descriptor_loss_3(desc, desc_warp, homography=sample['homography'],
-                                            margin_neg=config['model']['negative_margin'],
-                                            margin_pos=config['model']['positive_margin'],
-                                            lambda_d=config['model']['lambda_d'],
-                                            threshold=config['model']['descriptor_dist'],
-                                            valid_mask=None)
-            desc_loss_2.backward()
-            # total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss_2
-            # total_loss.backward()
+            desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['homography'],
+                                          margin_neg=config['model']['negative_margin'],
+                                          margin_pos=config['model']['positive_margin'],
+                                          lambda_d=config['model']['lambda_d'],
+                                          threshold=config['model']['descriptor_dist'],
+                                          valid_mask=sample['warped_mask'])
+            total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss
+            total_loss.backward()
             # plot_grad_flow(Net.named_parameters())
             optimizer.step()
-            running_loss += desc_loss_2.item()
+            running_loss += desc_loss.item()
             train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)}")
         # plt.show()
         # for key in Net.state_dict():

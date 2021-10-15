@@ -62,7 +62,7 @@ class TLSScanData(Dataset):
         if self.photometric:  # in photometric augmentations labels are unaffected
             aug = ImgAugTransform(**self.config['data']['augmentation'])
             image = aug(image)
-        valid_mask = compute_valid_mask(image.shape, inv_homography=torch.eye(3))
+        valid_mask = compute_valid_mask(image.shape, inv_homography=torch.eye(3)).type(torch.float32)
         sample['valid_mask'] = valid_mask
         image = torch.from_numpy(image)
         if self.homographic:
@@ -80,7 +80,8 @@ class TLSScanData(Dataset):
             warped_image = (torch.cat([image.unsqueeze(0)]*num_iter, dim=0) / 255.0).type(torch.float32)
             sample['warped_image'] = inv_warp_image_batch(warped_image.unsqueeze(1), mode='bilinear',
                                                           mat_homo_inv=inv_homography).unsqueeze(0)
-            sample['warped_mask'] = compute_valid_mask(torch.tensor([height, width]), inv_homography=inv_homography)
+            sample['warped_mask'] = inv_warp_image_batch(torch.cat([valid_mask.unsqueeze(0)]*num_iter, dim=0),
+                                                         inv_homography).unsqueeze(0)
             sample['homography'] = torch.from_numpy(homographies).type(torch.float32)
             sample['inv_homography'] = inv_homography
             if self.config['data'].get('labels', False):
