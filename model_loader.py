@@ -264,8 +264,8 @@ class SuperPointNetBatchNorm(SuperPointNet):
         cDa = self.convDa(x)
         desc = self.convDb(cDa)
         dn = torch.norm(desc, p=2, dim=1)  # Compute the norm.
-        desc = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
-        return {'semi': semi, 'desc': desc}  # semi is the detector head and desc is the descriptor head
+        desc_norm = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
+        return {'semi': semi, 'desc': desc_norm}  # semi is the detector head and desc is the descriptor head
 
 
 class double_conv(torch.nn.Module):

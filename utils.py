@@ -713,8 +713,7 @@ def descriptor_loss_3(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
                               torch.zeros_like(desc_product))
     loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr)
-    loss = torch.sum(loss_desc, dim=1) / (Hc*Wc)
-    return torch.mean(torch.sum(loss_desc, dim=1) / (Hc*Wc))
+    return torch.mean(torch.sum(loss_desc, dim=1) / count_true)
 
 
 def descriptor_loss(descriptors, descriptors_warped, homographies, mask_valid=None, cell_size=8, lamda_d=250,
