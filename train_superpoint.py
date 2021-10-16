@@ -1,7 +1,7 @@
 import torch
 import yaml
 from Data_loader import TLSScanData
-from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm
+from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm, SuperPointNetBatchNorm2
 import torch.optim as optim
 from utils import detector_loss, descriptor_loss_2, descriptor_loss_3
 from torchsummary import summary
@@ -86,7 +86,7 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['ev
                                          prefetch_factor=2)
 # val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=False,
 #                                          pin_memory=True, prefetch_factor=4, num_workers=1)
-Net = SuperPointNetBatchNorm()
+Net = SuperPointNetBatchNorm2()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -242,8 +242,8 @@ else:  # start descriptor training with the homographically adapted model
                 out_warp = Net(val_sample['warped_image'])
                 semi, desc = out['semi'], out['desc']
                 semi_warped, desc_warp = out_warp['semi'], out_warp['desc']
-                det_loss = detector_loss(val_sample['label'], semi, det_threshold=det_threshold)
-                det_warp_loss = detector_loss(val_sample['label'], semi_warped, det_threshold)
+                det_loss = detector_loss(val_sample['label'], semi, device)
+                det_warp_loss = detector_loss(val_sample['label'], semi_warped, device)
                 desc_loss = descriptor_loss_2(desc, desc_warp, homography=val_sample['homography'],
                                               margin_neg=config['model']['negative_margin'],
                                               margin_pos=config['model']['positive_margin'],

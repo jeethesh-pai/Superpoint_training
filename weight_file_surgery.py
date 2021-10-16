@@ -1,7 +1,7 @@
 import torch
 import torchvision.models
 
-from model_loader import SuperPointNetBatchNorm, SuperPointNet_gauss2  # load the new model from module
+from model_loader import SuperPointNetBatchNorm, SuperPointNet_gauss2, SuperPointNetBatchNorm2  # load the new model from module
 
 
 # uncomment the following for weight surgery between SuperPointNet and SuperPointNetBatchNorm
@@ -27,9 +27,17 @@ from model_loader import SuperPointNetBatchNorm, SuperPointNet_gauss2  # load th
 
 
 # uncomment the following section for weight surgery of ImageNet weight to SuperPointVGG16_BN
-model = torchvision.models.vgg16_bn(pretrained=False)
-model_weights = torch.load("../vgg16_bn-6c64b313.pth")
-model.load_state_dict(model_weights)
-model.features[0] = torch.nn.Conv2d(in_channels=1, out_channels=64, kernel_size=(3, 3))
-my_model = torch.nn.Sequential(*list(model.children())[:-1])
-print(model)
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+old_weight_file_path = "../homoAdaptiter2.pt"
+old_state_dict = torch.load(old_weight_file_path, map_location=device)
+old_model = SuperPointNetBatchNorm()
+old_model.load_state_dict(old_state_dict)
+# print(old_model)
+new_model = SuperPointNetBatchNorm2()
+new_state_dict = new_model.state_dict()
+for key in old_state_dict:
+    if key in new_state_dict.keys():
+        new_state_dict[key] = old_state_dict[key]
+torch.save(new_state_dict, '../homoAdaptiter2_with_descBN.pt')
+
+
