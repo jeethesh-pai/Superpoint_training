@@ -168,7 +168,7 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
         writer.flush()
         n_iter += 1
 else:  # start descriptor training with the homographically adapted model
-    writer = SummaryWriter(log_dir="logs/descriptor_training")
+    writer = SummaryWriter(log_dir="logs/descriptor_training")  # /content/drive/MyDrive/logs/joint_training
     writer.add_graph(wrappedModel, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).to(device))
     max_iter = config['train_iter']  # also called as epochs
     det_threshold = config['model']['detection_threshold']
@@ -187,21 +187,26 @@ else:  # start descriptor training with the homographically adapted model
     # for params in Net.named_parameters():
     #     if params[1].requires_grad is False:
     #         print(params[0])
+    count_nan = 0
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
         running_loss = 0
         train_bar = tqdm.tqdm(train_loader)
         Net.train(mode=True)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is set to true here
             # fig, axes = plt.subplots(2, 2)
-            # axes[0, 0].imshow(sample['image'].numpy()[0, 0, :, :].squeeze(), cmap='gray')
-            # axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            # axes[0, 1].imshow(sample['valid_mask'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            # axes[1, 1].imshow(sample['warped_mask'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[0, 0].imshow(sample['image'].numpy()[1, 0, :, :].squeeze(), cmap='gray')
+            # axes[1, 0].imshow(sample['warped_image'][1, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[0, 1].imshow(sample['valid_mask'][1, 0, :, :].numpy().squeeze(), cmap='gray')
+            # axes[1, 1].imshow(sample['warped_mask'][1, 0, :, :].numpy().squeeze(), cmap='gray')
             # plt.show()
             sample['image'] = sample['image'].to(device)
             sample['label'] = sample['label'].to(device)
             sample['warped_image'] = sample['warped_image'].to(device)
             sample['warped_label'] = sample['warped_label'].to(device)
+            if torch.sum(torch.isnan(sample['warped_image'])):
+                print('caught nan in warped image')
+                count_nan += 1
+                continue
             optimizer.zero_grad()
             out = Net(sample['image'])
             out_warp = Net(sample['warped_image'])

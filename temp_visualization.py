@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 
 
-directory = "../Dataset/HPatches/i_ajuntament"
+directory = "../Dataset/HPatches/v_strand"
 image_list = [os.path.join(directory, image) for image in os.listdir(directory)]
 images = [cv2.imread(image) for image in image_list if image[-3:] == 'ppm']
 fig, axes = plt.subplots(2, len(images) // 2)

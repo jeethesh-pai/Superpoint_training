@@ -59,7 +59,7 @@ model:
     lambda_d: 800 # 800
     positive_margin: 1
     negative_margin: 0.2
-    lambda_loss: 1 # 1
+    lambda_loss: 2 # 1
 
 reset_iter: True # set true to set the iteration number to 0
 train_iter: 20 # 170000

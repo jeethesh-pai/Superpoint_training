@@ -300,6 +300,7 @@ def warp_points(points, homographies, device='cpu'):
     warped_points = homographies @ points.transpose(0, 1)
     warped_points = warped_points.view([batch_size, 3, -1])
     warped_points = warped_points.transpose(2, 1)
+    denom = warped_points[:, :, 2:]
     warped_points = warped_points[:, :, :2] / warped_points[:, :, 2:]
     return warped_points[0, :, :] if no_batches else warped_points
 
@@ -667,13 +668,16 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
         valid_mask = valid_mask.unsqueeze(1)
     coords = torch.stack(torch.meshgrid(torch.linspace(0, Wc, Wc), torch.linspace(0, Hc, Hc)), dim=2)  # coordinates of Hc, Wc  grid
     coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
+    coords = coords.transpose(0, 1)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     warped_coord = warp_points(coords.reshape([-1, 2]), homography).reshape([batch_size, Hc*Wc, 1,  2])
     coords = torch.cat([coords.unsqueeze(0)]*batch_size, dim=0).reshape([batch_size, 1, Hc*Wc, 2])
     mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False, device=torch.device(device)).float()
     mask3D = torch.prod(mask3D, dim=1).to(device)
-    cell_dist = torch.linalg.norm(coords - warped_coord, dim=-1)
-    mask = (cell_dist <= threshold).type(torch.float32).to(device)
+    # bug in torch.linalg.norm making it longer to run than normal. Therefore avoid using it.
+    cell_dist = np.linalg.norm(coords - warped_coord, axis=-1)
+    mask = cell_dist <= threshold
+    mask = torch.from_numpy(mask.astype(np.float32)).to(device)
     new_desc = descriptor.reshape((batch_size, -1, size))
     new_warp_descriptor = descriptor_warped.reshape((batch_size, size, -1))
     desc_product = torch.matmul(new_desc, new_warp_descriptor)
@@ -682,7 +686,7 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
                               torch.zeros_like(desc_product))
     loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr) * mask3D.reshape([batch_size, 1, -1])
-    return loss_desc.sum() / ((mask3D.sum() + 1) * (Hc*Wc))
+    return torch.mean(loss_desc.sum(dim=(1, 2)) / ((mask3D.sum(dim=(1, 2)) + 1) * (Hc*Wc) + 1))
 
 
 def descriptor_loss_3(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,

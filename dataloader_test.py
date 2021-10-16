@@ -14,7 +14,7 @@ with open(config_file_path) as path:
 train_set = HPatches(transform=None, **config)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True)
 for k, sample in enumerate(train_loader):
-    if sample['change'][0] == "Viewpoint":
+    if sample['change'][0] == "viewpoint":
         images = sample['image'].squeeze()
         fig, axes = plt.subplots(2, len(images) // 2)
         count = 0
