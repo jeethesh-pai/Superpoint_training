@@ -345,8 +345,8 @@ class SuperPointNetBatchNorm2(SuperPointNet):
         cDa = self.convDa(x)
         desc = self.convDb(cDa)
         dn = torch.linalg.norm(desc, dim=1)  # Compute the norm.
-        desc_norm = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
-        # print('Descriptor_norm:', desc_norm, 'Shape: ', desc_norm.shape)
+        desc_norm = desc.div(torch.unsqueeze(dn, 1) + 1e-10)  # Divide by norm to normalize.
+        # print('Descriptor_norm zeros:', 2*27*40 - torch.count_nonzero(dn), 'Shape: ', desc_norm.shape)
         return {'semi': semi, 'desc': desc_norm}  # semi is the detector head and desc is the descriptor head
 
 

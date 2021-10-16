@@ -649,7 +649,7 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, device=torch.devic
     entropy_loss = CE_loss(output, labels3D)
     mask3D = labels2Dto3D(mask, cell_size=8, add_dustbin=False, device=device).float()
     mask3D = torch.prod(mask3D, dim=1).to(device)
-    loss = torch.divide(torch.sum(entropy_loss * mask3D, dim=(1, 2)), torch.sum(mask3D + 1e-10, dim=(1, 2)))
+    loss = torch.divide(torch.sum(entropy_loss * mask3D, dim=(1, 2)), torch.sum(mask3D, dim=(1, 2)) + 1)
     batch_mean_loss = torch.mean(loss)
     # add a small number to avoid division by zero
     #  return batch_mean_loss
