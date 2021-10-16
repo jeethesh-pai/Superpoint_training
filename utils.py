@@ -672,9 +672,8 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     coords = torch.cat([coords.unsqueeze(0)]*batch_size, dim=0).reshape([batch_size, 1, Hc*Wc, 2])
     mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False, device=torch.device(device)).float()
     mask3D = torch.prod(mask3D, dim=1).to(device)
-    cell_dist = np.linalg.norm(coords - warped_coord, axis=-1)
-    mask = cell_dist <= threshold
-    mask = torch.from_numpy(mask.astype(np.float32)).to(device)
+    cell_dist = torch.linalg.norm(coords - warped_coord, dim=-1)
+    mask = (cell_dist <= threshold).type(torch.float32).to(device)
     new_desc = descriptor.reshape((batch_size, -1, size))
     new_warp_descriptor = descriptor_warped.reshape((batch_size, size, -1))
     desc_product = torch.matmul(new_desc, new_warp_descriptor)
