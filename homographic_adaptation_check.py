@@ -2,7 +2,7 @@ import torch
 import os
 import numpy as np
 import cv2
-from model_loader import SuperPointNetBatchNorm, detector_post_processing
+from model_loader import SuperPointNetBatchNorm, detector_post_processing, SuperPointNetBatchNorm2
 from Data_loader import points_to_2D
 import matplotlib.pyplot as plt
 
@@ -20,6 +20,8 @@ homoadpatiter1_path = "../homoAdaptiter1.pt"
 homoadpatiter1 = torch.load(homoadpatiter1_path, map_location=torch.device('cpu'))
 homoadpatiter2_path = "../homoAdaptiter2.pt"
 homoadpatiter2 = torch.load(homoadpatiter2_path, map_location=torch.device('cpu'))
+homoadpatiter_joint_path = "../descriptorTrainingAfterIter2.pt"
+homoadpatiter2_joint = torch.load(homoadpatiter_joint_path, map_location=torch.device('cpu'))
 image_dir = '../Dataset/MSCOCO/Train'
 image_list = [os.path.join(image_dir, file) for file in os.listdir(image_dir)]
 sample_list = np.random.randint(0, len(image_list), size=(3, ))
@@ -27,6 +29,8 @@ sampled_image = [image_list[i] for i in sample_list]
 sampled_image = [image_processing(file).unsqueeze(0) for file in sampled_image]
 image_tensor = torch.cat(sampled_image, dim=0)
 model = SuperPointNetBatchNorm()
+model_normed = SuperPointNetBatchNorm2()
+model_normed.load_state_dict(homoadpatiter2_joint)
 model.load_state_dict(magicpoint_model)  # result of magicpoint keypoints
 model.train(mode=False)
 with torch.no_grad():
@@ -35,7 +39,7 @@ with torch.no_grad():
 model.load_state_dict(homoadpatiter1)  # result of homographic adaptation 1 keypoints
 model.train(mode=False)
 with torch.no_grad():
-    output = model(image_tensor.unsqueeze(1))
+    output = model_normed(image_tensor.unsqueeze(1))
     keypoint_adapt1 = output['semi']
 model.load_state_dict(homoadpatiter2)  # results of homographic adaptation 2 keypoints
 model.train(False)

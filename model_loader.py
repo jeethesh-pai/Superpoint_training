@@ -88,7 +88,7 @@ class SuperPointNet(torch.nn.Module):
     def eval_mode(self, image: np.ndarray, conf_threshold: float, H: int, W: int, dist_thresh: float) -> tuple:
         with torch.no_grad():
             (_, semi), (_, desc) = self.forward(
-                torch.from_numpy(image[np.newaxis, np.newaxis, :, :]).to('cuda')).items()
+                torch.from_numpy(image[np.newaxis, np.newaxis, :, :])).items()
             heatmap = flattenDetection(semi).cpu().numpy().squeeze()
             xs, ys = np.where(heatmap >= conf_threshold)
             if len(xs) == 0:
@@ -115,11 +115,9 @@ class SuperPointNet(torch.nn.Module):
                 samp_pts = samp_pts.transpose(0, 1).contiguous()
                 samp_pts = samp_pts.view(1, 1, -1, 2)
                 samp_pts = samp_pts.float()
-                if self.cuda:
-                    samp_pts = samp_pts.cuda()
-                desc = torch.nn.functional.grid_sample(desc, samp_pts)
+                desc = torch.nn.functional.grid_sample(desc, samp_pts, align_corners=True)
                 desc = desc.data.cpu().numpy().reshape(D, -1)
-                desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]
+                desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :] + 1e-10
         return pts, desc, heatmap
 
 
@@ -265,7 +263,7 @@ class SuperPointNetBatchNorm(SuperPointNet):
         desc = self.relu(self.convDb(cDa))
         dn = torch.linalg.norm(desc, dim=1)  # Compute the norm.
         desc_norm = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
-        print('Descriptor_norm:', desc_norm.sum(dim=1), 'Shape: ', desc_norm.shape)
+        # print('Descriptor_norm:', desc_norm.sum(dim=1), 'Shape: ', desc_norm.shape)
         return {'semi': semi, 'desc': desc_norm}  # semi is the detector head and desc is the descriptor head
 
 
@@ -446,7 +444,7 @@ class SuperPointNet_gauss2(torch.nn.Module):
             tuple:
         with torch.no_grad():
             (_, semi), (_, desc) = self.forward(
-                torch.from_numpy(image[np.newaxis, np.newaxis, :, :]).to('cuda')).items()
+                torch.from_numpy(image[np.newaxis, np.newaxis, :, :])).items()
             heatmap = flattenDetection(semi).cpu().numpy().squeeze()
             xs, ys = np.where(heatmap >= conf_threshold)
             if len(xs) == 0:
@@ -475,8 +473,6 @@ class SuperPointNet_gauss2(torch.nn.Module):
                 samp_pts = samp_pts.transpose(0, 1).contiguous()
                 samp_pts = samp_pts.view(1, 1, -1, 2)
                 samp_pts = samp_pts.float()
-                if self.cuda:
-                    samp_pts = samp_pts.cuda()
                 desc = torch.nn.functional.grid_sample(desc, samp_pts)
                 desc = desc.data.cpu().numpy().reshape(D, -1)
                 desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]

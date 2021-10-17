@@ -1,4 +1,5 @@
-from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm, SuperPointNet_gauss2
+from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm, SuperPointNet_gauss2, \
+    SuperPointNetBatchNorm2
 from cv2 import cv2
 import torch
 import numpy as np
@@ -32,7 +33,8 @@ def offset_keypoint(keypoint: list, img1_shape: tuple) -> list:
 
 
 def extract_superpoint_desc_keypoints(model: torch.nn.Module, img: str, size: tuple,
-                                      conf_threshold=0.015, dist_thresh=1):
+                                      conf_threshold=0.015, dist_thresh=3):
+    model.train(mode=False)
     img_gray = image_preprocess(img, size=size)
     keypoint, descriptor, heatmap = model.eval_mode(img_gray, conf_threshold, size[1], size[0], dist_thresh)
     keypoint = np.transpose(keypoint)
@@ -51,8 +53,8 @@ def draw_matches_superpoint(img1: str, img2: str, nn_thresh: float, size: tuple)
     :returns combined_image - image showing correspondence matches
     :returns kp_image - returns image with keypoints marked in it
     """
-    keypoint1, descriptor1 = extract_superpoint_desc_keypoints(Net, img1, size=size)
-    keypoint2, descriptor2 = extract_superpoint_desc_keypoints(Net, img2, size=size)
+    keypoint1, descriptor1 = extract_superpoint_desc_keypoints(Net, img1, conf_threshold=0.15, size=size)
+    keypoint2, descriptor2 = extract_superpoint_desc_keypoints(Net, img2, conf_threshold=0.15, size=size)
     img1, img2 = image_preprocess(img1, size), image_preprocess(img2, size)
     match = nn_match_descriptor(descriptor1, descriptor2, nn_thresh=nn_thresh)
     match_desc1_idx = np.array(match[0, :], dtype=int)  # descriptor 1 matches
@@ -64,8 +66,8 @@ def draw_matches_superpoint(img1: str, img2: str, nn_thresh: float, size: tuple)
     combined_image = cv2.hconcat([img1 * 255, img2 * 255])
     kp_image = np.copy(combined_image)
     kp_image = cv2.drawKeypoints(kp_image.astype(np.uint8), combined_keypoint, None, color=(0, 255, 0))
-    plt.imshow(kp_image, cmap='gray')
-    plt.show()
+    # plt.imshow(kp_image, cmap='gray')
+    # plt.show()
     match_point1 = cv2.KeyPoint_convert(matched_keypoint1)
     match_point2 = cv2.KeyPoint_convert(matched_keypoint2)
     H, inlier = cv2.findHomography(match_point1[:, [1, 0]], match_point2[:, [1, 0]], cv2.RANSAC)
@@ -136,24 +138,28 @@ def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
 
 
 #  "../pytorch-superpoint/datasets/TLS_Train/Train/"
-image_dir = "../pytorch-superpoint/datasets/HPatches/v_churchill/"
+image_dir = "../Dataset/HPatches/v_churchill/"
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 # uncomment the following for SuperpointNet()
-Net = SuperPointNet()
-checkpoint_path = "superpoint_v1.pth"
-# checkpoint_path = "colab_log/detector_training_pt2.pt"
-weight_dict = torch.load(checkpoint_path)
-Net.load_state_dict(weight_dict)
+# Net = SuperPointNet()
+# checkpoint_path = "superpoint_v1.pth"
+# # checkpoint_path = "colab_log/detector_training_pt2.pt"
+# weight_dict = torch.load(checkpoint_path)
+# Net.load_state_dict(weight_dict)
 
+Net = SuperPointNetBatchNorm2()
+weight_dict = torch.load("../descriptorTrainingAfterIter2.pt", map_location=torch.device(device))
+Net.load_state_dict(weight_dict)
 # Net = SuperPointNet_gauss2()
-# model_weights = torch.load("superPointNet_170000_checkpoint.pth.tar")
+# model_weights = torch.load("superPointNet_170000_checkpoint.pth.tar", map_location=device)
 # Net.load_state_dict(model_weights['model_state_dict'])
 
-Net = Net.to('cuda')
+Net = Net.to(device)
 image1 = image_dir + "1.ppm"
 image2 = image_dir + "6.ppm"
 # desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
-combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.7, size=(856, 576))
+combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.9, size=(856, 576))
 plt.imshow(combined)
 plt.title('Correspondence Image')
 plt.show()

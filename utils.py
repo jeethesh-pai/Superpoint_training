@@ -678,9 +678,12 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     cell_dist = np.linalg.norm(coords - warped_coord, axis=-1)
     mask = cell_dist <= threshold
     mask = torch.from_numpy(mask.astype(np.float32)).to(device)
-    new_desc = descriptor.reshape((batch_size, -1, size))
-    new_warp_descriptor = descriptor_warped.reshape((batch_size, size, -1))
-    desc_product = torch.matmul(new_desc, new_warp_descriptor)
+    # new_desc = descriptor.reshape((batch_size, -1, size))
+    # new_warp_descriptor = descriptor_warped.reshape((batch_size, size, -1))
+    # desc_product = torch.matmul(new_desc, new_warp_descriptor)
+    desc_product = descriptor.reshape([batch_size, -1, 1, size]) * descriptor_warped.reshape([batch_size, 1, -1, size])
+    desc_product = desc_product.sum(dim=-1)
+    # equality = torch.equal(desc_product, desc_product_2)
     positive_corr = torch.max(margin_pos * torch.ones_like(desc_product) - desc_product,
                               torch.zeros_like(desc_product))
     negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),

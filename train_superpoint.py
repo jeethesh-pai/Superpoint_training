@@ -173,7 +173,7 @@ else:  # start descriptor training with the homographically adapted model
     max_iter = config['train_iter']  # also called as epochs
     det_threshold = config['model']['detection_threshold']
     n_iter = 0
-    prev_val_loss = 0
+    prev_val_loss = None
     old_state_dict = {}
     new_state_dict = {}
     for key in Net.state_dict():
@@ -204,7 +204,7 @@ else:  # start descriptor training with the homographically adapted model
             sample['warped_image'] = sample['warped_image'].to(device)
             sample['warped_label'] = sample['warped_label'].to(device)
             if torch.sum(torch.isnan(sample['warped_image'])):
-                print('caught nan in warped image')
+                print('\ncaught nan in warped image', count_nan, 'times')
                 count_nan += 1
                 continue
             optimizer.zero_grad()
@@ -242,6 +242,10 @@ else:  # start descriptor training with the homographically adapted model
             val_sample['label'] = val_sample['label'].to(device)
             val_sample['warped_image'] = val_sample['warped_image'].to(device)
             val_sample['warped_label'] = val_sample['warped_label'].to(device)
+            if torch.sum(torch.isnan(sample['warped_image'])):
+                print('\ncaught nan in warped image', count_nan, 'times')
+                count_nan += 1
+                continue
             with torch.no_grad():
                 out = Net(val_sample['image'])
                 out_warp = Net(val_sample['warped_image'])
@@ -260,14 +264,10 @@ else:  # start descriptor training with the homographically adapted model
                 val_bar.set_description(f"Validation -- Epoch- {n_iter + 1} / {max_iter} - Validation loss: "
                                         f"{running_val_loss / (j + 1)}")
         running_val_loss /= len(val_loader)
-        if prev_val_loss == 0:
+        if prev_val_loss is None or prev_val_loss > running_val_loss:
             prev_val_loss = running_val_loss
             print('saving best model .... ')
             torch.save(copy.deepcopy(Net.state_dict()), "../descriptorTrainingAfterIter2.pt")
-        if prev_val_loss > running_val_loss:
-            torch.save(copy.deepcopy(Net.state_dict()), "../descriptorTrainingAfterIter2.pt")
-            print('saving best model .... ')
-            prev_val_loss = running_val_loss
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
         # for name, weight in Net.named_parameters():
