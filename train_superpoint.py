@@ -204,6 +204,10 @@ else:  # start descriptor training with the homographically adapted model
             sample['warped_image'] = sample['warped_image'].to(device)
             sample['warped_label'] = sample['warped_label'].to(device)
             if torch.sum(torch.isnan(sample['warped_image'])):
+                fig, axes = plt.subplots(1, 2)
+                axes[0].imshow(sample['warped_image'][1, 0, :, :].numpy().squeeze(), cmap='gray')
+                axes[1].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+                plt.show()
                 print('\ncaught nan in warped image', count_nan, 'times')
                 count_nan += 1
                 continue
@@ -214,7 +218,7 @@ else:  # start descriptor training with the homographically adapted model
             semi_warped, desc_warp = out_warp['semi'], out_warp['desc']
             det_loss = detector_loss(sample['label'], semi, device=device)
             det_warp_loss = detector_loss(sample['warped_label'], semi_warped, device=device)
-            desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['homography'],
+            desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['inv_homography'],
                                           margin_neg=config['model']['negative_margin'],
                                           margin_pos=config['model']['positive_margin'],
                                           lambda_d=config['model']['lambda_d'],
@@ -242,7 +246,7 @@ else:  # start descriptor training with the homographically adapted model
             val_sample['label'] = val_sample['label'].to(device)
             val_sample['warped_image'] = val_sample['warped_image'].to(device)
             val_sample['warped_label'] = val_sample['warped_label'].to(device)
-            if torch.sum(torch.isnan(sample['warped_image'])):
+            if torch.sum(torch.isnan(val_sample['warped_image'])):
                 print('\ncaught nan in warped image', count_nan, 'times')
                 count_nan += 1
                 continue
@@ -253,7 +257,7 @@ else:  # start descriptor training with the homographically adapted model
                 semi_warped, desc_warp = out_warp['semi'], out_warp['desc']
                 det_loss = detector_loss(val_sample['label'], semi, device)
                 det_warp_loss = detector_loss(val_sample['label'], semi_warped, device)
-                desc_loss = descriptor_loss_2(desc, desc_warp, homography=val_sample['homography'],
+                desc_loss = descriptor_loss_2(desc, desc_warp, homography=val_sample['inv_homography'],
                                               margin_neg=config['model']['negative_margin'],
                                               margin_pos=config['model']['positive_margin'],
                                               lambda_d=config['model']['lambda_d'],

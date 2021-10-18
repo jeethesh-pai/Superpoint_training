@@ -65,6 +65,7 @@ reset_iter: True # set true to set the iteration number to 0
 train_iter: 20 # 170000
 
 pretrained: "../homoAdaptiter2_with_descBN.pt" # /content/drive/MyDrive/homoAdaptiter2.pt
+# descriptorTrainingAfterIter2.pt, homoAdaptiter2_with_descBN.pt
 
 
 
