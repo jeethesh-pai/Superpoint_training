@@ -668,9 +668,8 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     valid_mask = torch.ones(size=(batch_size, H, W)) if valid_mask is None else valid_mask
     if len(valid_mask.shape) == 3:
         valid_mask = valid_mask.unsqueeze(1)
-    coords = torch.stack(torch.meshgrid(torch.linspace(0, Wc, Wc), torch.linspace(0, Hc, Hc)), dim=2)  # coordinates of Hc, Wc  grid
+    coords = torch.stack(torch.meshgrid(torch.arange(Wc), torch.arange(Hc)), dim=2)  # coordinates of Hc, Wc  grid
     coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
-    coords = coords.transpose(0, 1)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     warped_coord = warp_points(coords.reshape([-1, 2]), homography).reshape([batch_size, Hc*Wc, 1,  2])
     coords = torch.cat([coords.unsqueeze(0)]*batch_size, dim=0).reshape([batch_size, 1, Hc*Wc, 2])
