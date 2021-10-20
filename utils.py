@@ -8,7 +8,8 @@ import csv
 from numpy.random import normal
 from numpy.random import uniform
 from scipy.stats import truncnorm
-import torchmetrics
+import torchgeometry.core as tgm
+import matplotlib.pyplot as plt
 
 
 def img_overlap(img_r, img_g, img_gray):  # img_b repeat
@@ -163,16 +164,16 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
     margin = (1 - patch_ratio) / 2
     pts2 = margin + np.array([[0, 0], [0, patch_ratio], [patch_ratio, patch_ratio], [patch_ratio, 0]])
     # Random perspective and affine perturbations
-    # lower, upper = 0, 2
-    std_trunc = 2
 
     if perspective:
         if not allow_artifacts:
             perspective_amplitude_x = min(perspective_amplitude_x, margin)
             perspective_amplitude_y = min(perspective_amplitude_y, margin)
-        perspective_displacement = truncnorm(-1 * std_trunc, std_trunc, loc=0, scale=perspective_amplitude_y / 2).rvs(1)
-        h_displacement_left = truncnorm(-1 * std_trunc, std_trunc, loc=0, scale=perspective_amplitude_x / 2).rvs(1)
-        h_displacement_right = truncnorm(-1 * std_trunc, std_trunc, loc=0, scale=perspective_amplitude_x / 2).rvs(1)
+        trunc_x = perspective_amplitude_x / 2
+        trunc_y = perspective_amplitude_y / 2
+        perspective_displacement = truncnorm(-trunc_y, trunc_y, loc=0).rvs(1)
+        h_displacement_left = truncnorm(-trunc_x, trunc_x, loc=0).rvs(1)
+        h_displacement_right = truncnorm(-trunc_x, trunc_x, loc=0).rvs(1)
         pts2 += np.array([[h_displacement_left, perspective_displacement],
                           [h_displacement_left, -perspective_displacement],
                           [h_displacement_right, perspective_displacement],
@@ -181,14 +182,15 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
     # Random scaling
     # sample several scales, check collision with borders, randomly pick a valid one
     if scaling:
-        scales = truncnorm(-1 * std_trunc, std_trunc, loc=1, scale=scaling_amplitude / 2).rvs(n_scales)
+        trunc = scaling_amplitude / 2
+        scales = truncnorm(- trunc, trunc, loc=1).rvs(n_scales)
         scales = np.concatenate((np.array([1]), scales), axis=0)
         center = np.mean(pts2, axis=0, keepdims=True)
         scaled = (pts2 - center)[np.newaxis, :, :] * scales[:, np.newaxis, np.newaxis] + center
         if allow_artifacts:
             valid = np.arange(n_scales)  # all scales are valid except scale=1
         else:
-            valid = (scaled >= 0.) * (scaled < 1.)
+            valid = (scaled >= 0.) * (scaled <= 1.)
             valid = valid.prod(axis=1).prod(axis=1)
             valid = np.where(valid)[0]
         idx = valid[np.random.randint(valid.shape[0], size=1)].squeeze().astype(int)
@@ -210,12 +212,14 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
         center = np.mean(pts2, axis=0, keepdims=True)
         rot_mat = np.reshape(np.stack([np.cos(angles), -np.sin(angles), np.sin(angles),
                                        np.cos(angles)], axis=1), [-1, 2, 2])
-        rotated = np.matmul((pts2 - center)[np.newaxis, :, :], rot_mat) + center
+        pts_centered = (pts2 - center).transpose(1, 0)
+        rotated = np.matmul(rot_mat, pts_centered[np.newaxis, ...]) + center.T
+        rotated = rotated.transpose(0, 2, 1)
         if allow_artifacts:
             valid = np.arange(n_angles)  # all scales are valid except scale=1
         else:
-            valid = (rotated >= 0.) * (rotated < 1.)
-            valid = valid.prod(axis=1).prod(axis=1)
+            valid = (rotated >= 0.) * (rotated <= 1.)
+            valid = valid.prod(axis=(1, 2))
             valid = np.where(valid)[0]
         idx = valid[np.random.randint(valid.shape[0], size=1)].squeeze().astype(int)
         pts2 = rotated[idx, :, :]
@@ -310,23 +314,22 @@ def get_grid(x, y, homogenous=False):
     return np.vstack((coords, np.ones(coords.shape[1]))) if homogenous else coords
 
 
-def warp_image(img: np.ndarray, inv_homography: np.ndarray) -> np.ndarray:
-    if not isinstance(inv_homography, np.ndarray):
-        inv_homography = inv_homography.numpy()
-    if len(inv_homography.shape) == 2:
-        inv_homography = inv_homography[np.newaxis, :, :]
-    canvas = np.zeros((inv_homography.shape[0], img.shape[0], img.shape[1]))
-    coords = get_grid(img.shape[1], img.shape[0], True)
-    x2, y2 = coords[0], coords[1]
-    for i in range(inv_homography.shape[0]):
-        warp_coords = inv_homography[i, :, :].squeeze() @ coords
-        warp_coords = warp_coords.astype(np.int)
-        x1, y1 = warp_coords[0, :], warp_coords[1, :]
-        indices = np.where((x1 >= 0) & (x1 < img.shape[1]) & (y1 >= 0) & (y1 < img.shape[0]))
-        x1pix, y1pix = x2[indices[0]], y2[indices[0]]
-        x2pix, y2pix = x1[indices[0]], y1[indices[0]]
-        canvas[i, y1pix.astype(np.int64), x1pix.astype(np.int64)] = img[y2pix, x2pix]
+def warp_image_cv2(img: np.ndarray, inv_homography: np.ndarray) -> np.ndarray:
+    inv_homography = inv_homography.astype(np.float32).squeeze()
+    canvas = cv2.warpPerspective(img, M=inv_homography, dsize=(img.shape[1], img.shape[0]),
+                                 flags=cv2.WARP_INVERSE_MAP + cv2.INTER_LINEAR)
     return canvas
+
+
+def warp_image_torch(img: torch.Tensor, inv_homography: torch.Tensor) -> torch.Tensor:
+    if len(img.shape) < 3:
+        img = img[np.newaxis, np.newaxis, ...]
+    Batch, channel, H, W = img.shape
+    warper = tgm.HomographyWarper(H, W, normalized_coordinates=False)
+    warped_img = warper(img, inv_homography)
+    plt.imshow(warped_img, cmap='gray')
+    plt.show()
+    return warped_img
 
 
 def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
@@ -545,7 +548,7 @@ def compute_valid_mask(image_shape, inv_homography, device='cpu', erosion_radius
         inv_homography = inv_homography.view(-1, 3, 3)
     batch_size = inv_homography.shape[0]  # this is not exactly the batch size
     mask = np.ones((image_shape[0], image_shape[1]), dtype=np.uint8)
-    mask = warp_image(mask, inv_homography)
+    mask = warp_image_cv2(mask, inv_homography)
     if erosion_radius > 0:
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erosion_radius * 2,) * 2)
         for i in range(batch_size):
@@ -658,6 +661,48 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, device=torch.devic
     return {'loss': batch_mean_loss}
 
 
+def filter_points_batch(points, shape):
+    #  check!
+    x_warp, y_warp = points[..., 0], points[..., 1]
+    cond_1 = torch.ge(x_warp, 0)
+    cond_2 = torch.less(x_warp, shape[0])
+    cond_3 = torch.ge(y_warp, 0)
+    cond_4 = torch.less(y_warp, shape[1])
+    cond_final = cond_1 * cond_2 * cond_3 * cond_4
+    indices = torch.where(cond_final)
+    return indices
+
+
+@torch.enable_grad()
+def descriptor_loss_modified(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,
+                             lambda_d: float, margin_pos: float, margin_neg: float, threshold=8, valid_mask=None):
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    batch_size, size, Hc, Wc = descriptor_warped.shape
+    H, W = Hc * 8, Wc * 8
+    valid_mask = torch.ones(size=(batch_size, H, W)) if valid_mask is None else valid_mask
+    if len(valid_mask.shape) == 3:
+        valid_mask = valid_mask.unsqueeze(1)
+    coords = torch.stack(torch.meshgrid(torch.arange(Wc), torch.arange(Hc)), dim=2)  # coordinates of Hc, Wc  grid
+    coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
+    coords = coords.reshape([-1, 2])
+    warped_coord = warp_points(coords, homography)
+    trueIdx = filter_points_batch(warped_coord, shape=(W, H))
+    s = torch.zeros(size=(batch_size, Hc*Wc, Hc*Wc), dtype=torch.float32)
+    s[trueIdx[0], trueIdx[1], trueIdx[1]] = 1.0
+    mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False, device=torch.device(device)).float()
+    mask3D = torch.prod(mask3D, dim=1).to(device)
+    desc_product = descriptor.reshape([batch_size, -1, 1, size]) * descriptor_warped.reshape([batch_size, 1, -1, size])
+    desc_product = desc_product.sum(dim=-1)
+    positive_corr = torch.max(margin_pos * torch.ones_like(desc_product) - desc_product,
+                              torch.zeros_like(desc_product))
+    ps_sum = torch.count_nonzero(positive_corr * s)
+    negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
+                              torch.zeros_like(desc_product))
+    neg_sum = torch.count_nonzero(negative_corr * (1-s))
+    loss_desc = (lambda_d * s * positive_corr + (1 - s) * negative_corr) * mask3D.reshape([batch_size, 1, -1])
+    return torch.mean(loss_desc.sum(dim=(1, 2)) / ((mask3D.sum(dim=(1, 2)) + 1) * (Hc * Wc) + 1))
+
+
 def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,
                       lambda_d: float, margin_pos: float, margin_neg: float, threshold=8, valid_mask=None) -> \
         torch.Tensor:
@@ -671,8 +716,8 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     coords = torch.stack(torch.meshgrid(torch.arange(Wc), torch.arange(Hc)), dim=2)  # coordinates of Hc, Wc  grid
     coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    warped_coord = warp_points(coords.reshape([-1, 2]), homography).reshape([batch_size, Hc*Wc, 1,  2])
-    coords = torch.cat([coords.unsqueeze(0)]*batch_size, dim=0).reshape([batch_size, 1, Hc*Wc, 2])
+    warped_coord = warp_points(coords.reshape([-1, 2]), homography).reshape([batch_size, Hc * Wc, 1, 2])
+    coords = torch.cat([coords.unsqueeze(0)] * batch_size, dim=0).reshape([batch_size, 1, Hc * Wc, 2])
     mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False, device=torch.device(device)).float()
     mask3D = torch.prod(mask3D, dim=1).to(device)
     # bug in torch.linalg.norm making it longer to run than normal. Therefore avoid using it.
@@ -693,7 +738,7 @@ def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
                               torch.zeros_like(desc_product))
     # neg_sum = torch.count_nonzero(negative_corr * (1-mask))
     loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr) * mask3D.reshape([batch_size, 1, -1])
-    return torch.mean(loss_desc.sum(dim=(1, 2)) / ((mask3D.sum(dim=(1, 2)) + 1) * (Hc*Wc) + 1))
+    return torch.mean(loss_desc.sum(dim=(1, 2)) / ((mask3D.sum(dim=(1, 2)) + 1) * (Hc * Wc) + 1))
 
 
 def descriptor_loss_3(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,
@@ -704,12 +749,13 @@ def descriptor_loss_3(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     valid_mask = torch.ones(size=(batch_size, H, W)) if valid_mask is None else valid_mask
     if len(valid_mask.shape) == 3:
         valid_mask = valid_mask.unsqueeze(1)
-    coords = torch.stack(torch.meshgrid(torch.linspace(0, Wc, Wc), torch.linspace(0, Hc, Hc)), dim=2)  # coordinates of Hc, Wc  grid
+    coords = torch.stack(torch.meshgrid(torch.linspace(0, Wc, Wc), torch.linspace(0, Hc, Hc)),
+                         dim=2)  # coordinates of Hc, Wc  grid
     coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
     coords = coords.transpose(1, 0).reshape([-1, 2])
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     warped_coord = warp_points(coords, homography).reshape([batch_size, -1, 2])
-    coords = torch.cat([coords.unsqueeze(0)]*batch_size, dim=0)
+    coords = torch.cat([coords.unsqueeze(0)] * batch_size, dim=0)
     cell_dist = torch.linalg.norm(coords - warped_coord, dim=-1)
     mask = (cell_dist <= threshold).to(device).type(torch.float32)
     count_true = torch.count_nonzero(mask, dim=0)
@@ -721,7 +767,7 @@ def descriptor_loss_3(descriptor: torch.Tensor, descriptor_warped: torch.Tensor,
     negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
                               torch.zeros_like(desc_product))
     loss_desc = (lambda_d * mask * positive_corr + (1 - mask) * negative_corr)
-    return torch.mean(torch.sum(loss_desc, dim=1) / (Hc*Wc))
+    return torch.mean(torch.sum(loss_desc, dim=1) / (Hc * Wc))
 
 
 def descriptor_loss(descriptors, descriptors_warped, homographies, mask_valid=None, cell_size=8, lamda_d=250,
