@@ -100,6 +100,4 @@ if config['data']['generate_label']:
                 #                         img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
                 # plt.show()
                 # print('something')
-                # np.save(filename, pts)
-        if count > 5:
-            break
+                np.save(filename, pts)

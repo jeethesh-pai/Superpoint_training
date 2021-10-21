@@ -129,7 +129,7 @@ def semi_to_heatmap(semi: torch.Tensor) -> np.ndarray:
     """
     assert len(semi.shape) == 4
     SoftMax = torch.nn.Softmax(dim=1)  # apply softmax on the channel dimension with 65
-    soft_output = SoftMax(semi.squeeze())
+    soft_output = SoftMax(semi)
     soft_output = soft_output[:, :-1, :, :]
     pixel_shuffle = torch.nn.PixelShuffle(upscale_factor=8)
     heatmap = pixel_shuffle(soft_output).squeeze()
@@ -261,8 +261,8 @@ class SuperPointNetBatchNorm(SuperPointNet):
 
         # Descriptor Head.
         cDa = self.convDa(x)
-        desc = self.relu(self.convDb(cDa))
-        dn = torch.linalg.norm(desc, dim=1)  # Compute the norm.
+        desc = self.convDb(cDa)
+        dn = torch.linalg.norm(desc + 1e-10, dim=1)  # Compute the norm.
         desc_norm = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
         # print('Descriptor_norm:', desc_norm.sum(dim=1), 'Shape: ', desc_norm.shape)
         return {'semi': semi, 'desc': desc_norm}  # semi is the detector head and desc is the descriptor head
@@ -312,7 +312,7 @@ class SuperPointNetBatchNorm2(SuperPointNet):
             torch.nn.BatchNorm2d(num_features=c5), torch.nn.ReLU(inplace=True))
         self.convDb = torch.nn.Sequential(
             torch.nn.Conv2d(c5, d1, kernel_size=(1, 1), stride=(1, 1), padding=0),
-            torch.nn.BatchNorm2d(num_features=d1), torch.nn.ReLU(inplace=True)
+            torch.nn.BatchNorm2d(num_features=d1)
         )
 
     def forward(self, x: torch.Tensor) -> dict:
@@ -516,3 +516,31 @@ class SuperPointNet_gauss2(torch.nn.Module):
                 desc = desc.data.cpu().numpy().reshape(D, -1)
                 desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]
         return pts, desc, heatmap
+
+
+class ModelWrapper(torch.nn.Module):
+    """
+    Wrapper class for model with dict/list rvalues. This wraps model with dictionary outputs
+    """
+
+    def __init__(self, model: torch.nn.Module) -> None:
+        """
+        Init call.
+        """
+        super().__init__()
+        self.model = model
+
+    def forward(self, input_x: torch.Tensor):
+        """
+        Wrap forward call.
+        """
+        data = self.model(input_x)
+
+        if isinstance(data, dict):
+            data_named_tuple = namedtuple("ModelEndpoints", sorted(data.keys()))  # type: ignore
+            data = data_named_tuple(**data)  # type: ignore
+
+        elif isinstance(data, list):
+            data = tuple(data)
+
+        return data

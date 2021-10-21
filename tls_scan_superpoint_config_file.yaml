@@ -67,7 +67,7 @@ model:
     batch_size: 2 # 32
     eval_batch_size: 1 # 32
     learning_rate: 0.0001 # 0.0001
-    detection_threshold: 0.35 # 0.015
+    detection_threshold: 0.45 # 0.015
     lambda_loss: 1 # 1
     nms: 4
     dense_loss:

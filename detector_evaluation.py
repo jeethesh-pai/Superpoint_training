@@ -1,8 +1,8 @@
 import torch
 import yaml
 from Data_loader import TLSScanData, points_to_2D
-from model_loader import SuperPointNet, load_model, detector_post_processing, SuperPointNet_gauss2
-from utils import flattenDetection, warpLabels, get_grid, filter_points, warp_image, nms_fast
+from model_loader import SuperPointNet, detector_post_processing, SuperPointNetBatchNorm2, ModelWrapper
+from utils import flattenDetection, warpLabels, get_grid, filter_points, nms_fast
 from torchsummary import summary
 import os
 import numpy as np
@@ -38,22 +38,22 @@ def repeatability(pts1, pts2, correct_distance=3):
 
 parser = argparse.ArgumentParser(description="This scripts helps to evaluate detector using different metrics")
 parser.add_argument('--config', help='Path to config file',
-                    default="../my_superpoint_pytorch/evaluation_config.yaml")
+                    default="evaluation_config.yaml")
 parser.add_argument('--epsilon',  help='threshold distance used to calculate repeatability', default=1, type=int)
 args = parser.parse_args()
-
+device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 config_file_path = args.config
 with open(config_file_path) as path:
     config = yaml.load(path)
-# model = SuperPointNet()
+model = SuperPointNetBatchNorm2()
 size = config['data']['preprocessing']['resize']
 epsilon = config['model']['epsilon']
-model = torch.load(config['pretrained'])
-# model.load_state_dict(model_weights)
+model_weights = torch.load(config['pretrained'])
+model.load_state_dict(model_weights)
 batch_size = config['model']['batch_size']
-model.to('cuda')
+model.to(device)
 summary(model, input_size=(1, size[0], size[1]))
-data_set = TLSScanData(transform=None, task='train', **config)
+data_set = TLSScanData(transform=None, task='val', **config)
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=False)
 tqdm_bar = tqdm.tqdm(data_loader)
 repeat_metric_list = []
@@ -61,9 +61,8 @@ model.train(mode=False)
 for sample in tqdm_bar:
     tqdm_bar.set_description("Evaluation of Detector")
     W, H = config['data']['preprocessing']['resize']
-    if torch.cuda.is_available():
-        sample['image'] = sample['image'].to('cuda')
-        sample['warped_image'] = sample['warped_image'].to('cuda')
+    sample['image'] = sample['image'].to(device)
+    sample['warped_image'] = sample['warped_image'].to(device)
     with torch.no_grad():
         output = model(sample['image'])
         semi = output['semi']

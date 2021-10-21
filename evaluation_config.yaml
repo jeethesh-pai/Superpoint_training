@@ -21,7 +21,7 @@ data:
                     kernel_size_range: [100, 150]
                 motion_blur: {max_kernel_size: 3}
         homographic:
-            enable: false
+            enable: true
             num: 1 # 100
             aggregation: 'sum'
             filter_counts: 0
@@ -31,7 +31,7 @@ data:
                     rotation: true
                     scaling: false
                     perspective: true
-                    scaling_amplitude: 1
+                    scaling_amplitude: 0.5
                     perspective_amplitude_x: 0.3
                     perspective_amplitude_y: 0.3
                     allow_artifacts: true

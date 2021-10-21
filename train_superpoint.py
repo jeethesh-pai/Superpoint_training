@@ -87,7 +87,7 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['ev
                                          prefetch_factor=2)
 # val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=False,
 #                                          pin_memory=True, prefetch_factor=4, num_workers=1)
-Net = SuperPointNetBatchNorm2()
+Net = SuperPointNetBatchNorm()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -265,7 +265,7 @@ else:  # start descriptor training with the homographically adapted model
         if prev_val_loss is None or prev_val_loss > running_val_loss:
             prev_val_loss = running_val_loss
             print('saving best model .... ')
-            torch.save(copy.deepcopy(Net.state_dict()), "../descriptorTrainingAfterIter2myloss.pt")
+            torch.save(copy.deepcopy(Net.state_dict()), f"../descriptorTrainingAfterIter2myloss_{n_iter+1}.pt")
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
         writer.flush()

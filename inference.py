@@ -3,7 +3,7 @@ from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm, Supe
 from cv2 import cv2
 import torch
 import numpy as np
-from utils import nn_match_descriptor
+from utils import nn_match_descriptor, sample_homography
 import matplotlib.pyplot as plt
 
 
@@ -139,7 +139,8 @@ def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
 
 
 #  "../pytorch-superpoint/datasets/TLS_Train/Train/"
-image_dir = "../Dataset/HPatches/v_churchill/"
+image_dir = "../Dataset/HPatches/i_ajuntament/"
+mscoco_image_dir = "../Dataset/MSCOCO/"
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
 # uncomment the following for SuperpointNet()
@@ -149,8 +150,8 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 # weight_dict = torch.load(checkpoint_path)
 # Net.load_state_dict(weight_dict)
 
-Net = SuperPointNetBatchNorm2()
-weight_dict = torch.load("../descriptorTrainingAfterIter2myloss.pt", map_location=torch.device(device))
+Net = SuperPointNetBatchNorm()
+weight_dict = torch.load("../descriptorTrainingAfterIter2myloss(1).pt", map_location=torch.device(device))
 Net.load_state_dict(weight_dict)
 # Net = SuperPointNet_gauss2()
 # model_weights = torch.load("superPointNet_170000_checkpoint.pth.tar", map_location=device)
@@ -159,8 +160,15 @@ Net.load_state_dict(weight_dict)
 Net = Net.to(device)
 image1 = image_dir + "1.ppm"
 image2 = image_dir + "6.ppm"
+# image1 = image_dir + "COCO_train2014_000000000025.jpg"
+homography = sample_homography(np.array([320, 216]), shift=0, scaling=True, perspective=True,
+                               translation=True, patch_ratio=1, max_angle=0.785, rotation=True,
+                               perspective_amplitude_x=0.7, perspective_amplitude_y=0.7, allow_artifacts=True,
+                               scaling_amplitude=0.5).numpy().squeeze()
+# image2 = cv2.warpPerspective(image1, homography, flags=cv2.WARP_INVERSE_MAP+cv2.INTER_LINEAR, dsize=(320, 216))
+
 # desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
-combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.9, size=(856, 576), conf_threshold=0.0015)
+combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.8, size=(856, 576), conf_threshold=0.0015)
 plt.imshow(combined)
 plt.title('Correspondence Image')
 plt.show()
