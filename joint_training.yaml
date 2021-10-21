@@ -42,25 +42,26 @@ data:
                     rotation: true
                     scaling: true
                     perspective: true
-                    scaling_amplitude: 0.3
-                    perspective_amplitude_x: 0.3
-                    perspective_amplitude_y: 0.3
+                    scaling_amplitude: 0.5
+                    perspective_amplitude_x: 0.7
+                    perspective_amplitude_y: 0.7
                     allow_artifacts: true
                     patch_ratio: 0.85
                     max_angle: 0.785
         valid_border_margin: 3
 
 model:
-    batch_size: 2 # 32
-    eval_batch_size: 2 # 32
+    batch_size: 1 # 32
+    update_batch_size: 32
+    eval_batch_size: 1 # 32
     learning_rate: 0.001 # 0.0001
     detection_threshold: 0.35 # 0.015
     nms: 1
     descriptor_dist: 8 # 4, 7.5
-    lambda_d: 800 # 800
+    lambda_d: 250 # 800
     positive_margin: 1
     negative_margin: 0.2
-    lambda_loss: 2 # 1
+    lambda_loss: 0.0001 # 1
 
 reset_iter: True # set true to set the iteration number to 0
 train_iter: 20 # 170000

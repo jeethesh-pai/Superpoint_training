@@ -1,5 +1,5 @@
 import cv2
-from utils import inv_warp_image_batch, warp_points, warp_image_cv2, filter_points
+from utils import inv_warp_image_batch, warp_points, warp_image_cv2, filter_points, my_inv_warp_image_batch
 import torch
 import numpy as np
 import yaml
@@ -145,6 +145,7 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
     """
     # Corners of the output image
     pts1 = np.stack([[0., 0.], [0., 1.], [1., 1.], [1., 0.]], axis=0)
+    pts1_torch = torch.Tensor([[0., 0.], [0., 1.], [1., 1.], [1., 0.]])
     # Corners of the input patch
     margin = (1 - patch_ratio) / 2
     pts2 = margin + np.array([[0, 0], [0, patch_ratio], [patch_ratio, patch_ratio], [patch_ratio, 0]])
@@ -214,6 +215,7 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
     pts1 *= shape[np.newaxis, :]
     pts2 *= shape[np.newaxis, :]
     homography = cv2.getPerspectiveTransform(np.float32(pts1 + shift), np.float32(pts2 + shift))
+    torch_hom = torch.from_numpy(homography)
     return homography, torch_hom
 
 
@@ -230,15 +232,15 @@ coords = np.stack(np.meshgrid(np.arange(img.shape[1]//8), torch.arange(img.shape
 coords = np.transpose(coords, axes=(1, 0, 2))
 coords = coords * 8 + 8 // 2
 homography, torch_hom = sample_homography(np.array([img.shape[0], img.shape[1]]), shift=0, scaling=True, perspective=True,
-                               translation=True, patch_ratio=1, max_angle=0.785, rotation=True,
-                               perspective_amplitude_x=0.5, perspective_amplitude_y=0.5, allow_artifacts=True,
-                               scaling_amplitude=0.1)
+                                          translation=True, patch_ratio=1, max_angle=0.785, rotation=True,
+                                          perspective_amplitude_x=0.7, perspective_amplitude_y=0.7, allow_artifacts=True,
+                                          scaling_amplitude=0.5)
 
 # homography = np.eye(3).astype(np.float32)
 # homography[0, 2] = 2
-torch_inv = inv_warp_image_batch(torch.from_numpy(img[np.newaxis, np.newaxis, ...]).type(torch.float32),
-                                 torch.linalg.inv(torch_hom).type(torch.float32)).unsqueeze(0)
-torch_orig = inv_warp_image_batch(torch_inv.unsqueeze(0), torch_hom.type(torch.float32))
+torch_inv = my_inv_warp_image_batch(torch.from_numpy(img[np.newaxis, np.newaxis, ...]).type(torch.float32),
+                                    torch_hom.type(torch.float32)).unsqueeze(0)
+torch_orig = my_inv_warp_image_batch(torch_inv.unsqueeze(0), torch.linalg.inv(torch_hom).type(torch.float32))
 inv_img = warp_image_cv2(img, homography)
 img = warp_image_cv2(inv_img, np.linalg.inv(homography))
 warped_coord = warp_points(torch.from_numpy(coords.reshape([-1, 2])),
@@ -249,6 +251,9 @@ warped_coord = warped_coord.reshape([1, -1, 2])
 warp_mask = filter_points(warped_coord.squeeze(), (img.shape[1], img.shape[0]), indicesTrue=True)
 warped_coords_masked = warped_coord.squeeze()[warp_mask[0]].astype(np.int)
 inv_img[warped_coords_masked[:, 1], warped_coords_masked[:, 0]] = 255
+torch_orig = torch_orig.numpy().squeeze()
+torch_inv = torch_inv.numpy().squeeze()
+torch_inv[warped_coords_masked[:, 1], warped_coords_masked[:, 0]] = 255
 concat_img = np.hstack([orig_image, inv_img])
 warped_coords_masked[:, 0] += img.shape[1]
 coords_masked = coords.squeeze()[warp_mask[0]].astype(np.int)
@@ -267,8 +272,8 @@ axes[2].imshow(img, cmap='gray')
 plt.figure(figsize=(12, 12))
 plt.imshow(concat_img, cmap='gray')
 fig, axes = plt.subplots(1, 2)
-axes[0].imshow(torch_orig.numpy().squeeze(), cmap='gray')
-axes[1].imshow(torch_inv.numpy().squeeze(), cmap='gray')
+axes[0].imshow(torch_orig, cmap='gray')
+axes[1].imshow(torch_inv, cmap='gray')
 plt.show()
 norm = np.linalg.norm(coords - warped_coord, axis=-1)
 norm_min = np.amin(norm, axis=-1)

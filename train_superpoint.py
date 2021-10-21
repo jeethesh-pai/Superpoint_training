@@ -1,3 +1,4 @@
+import cv2
 import torch
 import yaml
 from Data_loader import TLSScanData
@@ -190,6 +191,7 @@ else:  # start descriptor training with the homographically adapted model
     count_nan = 0
     while n_iter < max_iter:  # epochs can be lesser since no random homographic adaptation is involved
         running_loss = 0
+        optimizer.zero_grad()
         train_bar = tqdm.tqdm(train_loader)
         Net.train(mode=True)
         for i, sample in enumerate(train_bar):  # make sure the homographic adaptation is set to true here
@@ -198,20 +200,19 @@ else:  # start descriptor training with the homographically adapted model
             # axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
+            # fig, axes = plt.subplots(1, 2)
+            # axes[0].imshow(sample['image'].numpy().squeeze(), cmap='gray')
+            # axes[1].imshow(cv2.warpPerspective(sample['image'].numpy().squeeze(), sample['homography'].numpy().squeeze(),
+            #                                    flags=cv2.WARP_INVERSE_MAP+cv2.INTER_LINEAR, dsize=(320, 216)), cmap='gray')
             # plt.show()
             sample['image'] = sample['image'].to(device)
             sample['label'] = sample['label'].to(device)
             sample['warped_image'] = sample['warped_image'].to(device)
             sample['warped_label'] = sample['warped_label'].to(device)
             if torch.sum(torch.isnan(sample['warped_image'])):
-                fig, axes = plt.subplots(1, 2)
-                axes[0].imshow(sample['warped_image'][1, 0, :, :].numpy().squeeze(), cmap='gray')
-                axes[1].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-                plt.show()
                 print('\ncaught nan in warped image', count_nan, 'times')
                 count_nan += 1
                 continue
-            optimizer.zero_grad()
             out = Net(sample['image'])
             out_warp = Net(sample['warped_image'])
             semi, desc = out['semi'], out['desc']
@@ -224,26 +225,13 @@ else:  # start descriptor training with the homographically adapted model
                                                  lambda_d=config['model']['lambda_d'],
                                                  threshold=config['model']['descriptor_dist'],
                                                  valid_mask=sample['warped_mask'])
-            # desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['inv_homography'],
-            #                               margin_neg=config['model']['negative_margin'],
-            #                               margin_pos=config['model']['positive_margin'],
-            #                               lambda_d=config['model']['lambda_d'],
-            #                               threshold=config['model']['descriptor_dist'],
-            #                               valid_mask=sample['warped_mask'])
             total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss
             total_loss.backward()
-            # plot_grad_flow(Net.named_parameters())
-            optimizer.step()
-            running_loss += desc_loss.item()
+            running_loss += total_loss.item()
+            if (i + 1) * batch_size % config['model']['update_batch_size'] == 0:  # performing big batch updates
+                optimizer.step()
+                optimizer.zero_grad()
             train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)}")
-        # plt.show()
-        # for key in Net.state_dict():
-        #     new_state_dict[key] = Net.state_dict()[key].clone()
-        # for key in old_state_dict:
-        #     if not (old_state_dict[key] == new_state_dict[key]).all():
-        #         print('Diff in {}'.format(key))
-        #     else:
-        #         print('same old shit')
         running_val_loss = 0
         val_bar = tqdm.tqdm(val_loader)
         Net.train(mode=False)
@@ -277,12 +265,9 @@ else:  # start descriptor training with the homographically adapted model
         if prev_val_loss is None or prev_val_loss > running_val_loss:
             prev_val_loss = running_val_loss
             print('saving best model .... ')
-            torch.save(copy.deepcopy(Net.state_dict()), "../descriptorTrainingAfterIter2.pt")
+            torch.save(copy.deepcopy(Net.state_dict()), "../descriptorTrainingAfterIter2myloss.pt")
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
-        # for name, weight in Net.named_parameters():
-        #     writer.add_histogram(name, weight, n_iter + 1)
-        #     writer.add_histogram(f'{name}.grad', weight.grad, n_iter + 1)
         writer.flush()
         n_iter += 1
     writer.close()

@@ -1,5 +1,6 @@
 import torch
 import torchvision.models
+import matplotlib.pyplot as plt
 
 from utils import detector_loss, descriptor_loss_2, flattenDetection, nms_fast
 import numpy as np
@@ -344,9 +345,47 @@ class SuperPointNetBatchNorm2(SuperPointNet):
         desc = self.convDb(cDa)
         dn = torch.linalg.norm(desc + 1e-10, dim=1)  # Compute the norm.
         desc_norm = desc.div(torch.unsqueeze(dn, 1))  # Divide by norm to normalize.
-        # print('\nmax:', torch.amax(desc_norm, dim=(1, 2, 3)), 'min:', torch.amin(desc_norm, dim=(1, 2, 3)))
-        # print('Descriptor_norm zeros:', 2*27*40 - torch.count_nonzero(dn), 2*27*40 - torch.count_nonzero(dn + 1e-10), 'Shape: ', desc_norm.shape)
         return {'semi': semi, 'desc': desc_norm}  # semi is the detector head and desc is the descriptor head
+
+    def eval_mode(self, image: np.ndarray, conf_threshold: float, H: int, W: int, dist_thresh: float, top_k=600) -> \
+            tuple:
+        with torch.no_grad():
+            (_, semi), (_, desc) = self.forward(
+                torch.from_numpy(image[np.newaxis, np.newaxis, :, :])).items()
+            heatmap = flattenDetection(semi).cpu().numpy().squeeze()
+            plt.imshow(heatmap, cmap='gray')
+            plt.show()
+            xs, ys = np.where(heatmap >= conf_threshold)
+            if len(xs) == 0:
+                return np.zeros((3, 0)), None, None
+            pts = np.zeros((3, len(xs)))
+            pts[0, :] = ys
+            pts[1, :] = xs
+            pts[2, :] = heatmap[xs, ys]
+            pts, _ = nms_fast(pts, H, W, dist_thresh=dist_thresh)
+            inds = np.argsort(-pts[2, :])  # sort by confidence
+            bord = 4  # border to remove
+            toremoveW = np.logical_or(pts[0, :] < bord, pts[0, :] >= (W - bord))
+            toremoveH = np.logical_or(pts[1, :] < bord, pts[1, :] >= (H - bord))
+            toremove = np.logical_or(toremoveW, toremoveH)
+            pts = pts[:, ~toremove]
+            if pts.shape[1] > top_k:
+                pts = pts[:, :top_k]
+            #  -- process descriptor
+            D = desc.shape[1]
+            if pts.shape[1] == 0:
+                desc = np.zeros((D, 0))
+            else:
+                samp_pts = torch.from_numpy(pts[:2, :].copy())
+                samp_pts[0, :] = (samp_pts[0, :] / (float(W) / 2.)) - 1.
+                samp_pts[1, :] = (samp_pts[1, :] / (float(H) / 2.)) - 1.
+                samp_pts = samp_pts.transpose(0, 1).contiguous()
+                samp_pts = samp_pts.view(1, 1, -1, 2)
+                samp_pts = samp_pts.float()
+                desc = torch.nn.functional.grid_sample(desc, samp_pts)
+                desc = desc.data.cpu().numpy().reshape(D, -1)
+                desc /= np.linalg.norm(desc, axis=0)[np.newaxis, :]
+        return pts, desc, heatmap
 
 
 class double_conv(torch.nn.Module):

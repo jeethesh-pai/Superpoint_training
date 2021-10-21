@@ -53,8 +53,8 @@ def draw_matches_superpoint(img1: str, img2: str, nn_thresh: float, size: tuple)
     :returns combined_image - image showing correspondence matches
     :returns kp_image - returns image with keypoints marked in it
     """
-    keypoint1, descriptor1 = extract_superpoint_desc_keypoints(Net, img1, conf_threshold=0.15, size=size)
-    keypoint2, descriptor2 = extract_superpoint_desc_keypoints(Net, img2, conf_threshold=0.15, size=size)
+    keypoint1, descriptor1 = extract_superpoint_desc_keypoints(Net, img1, conf_threshold=1e-4, size=size)
+    keypoint2, descriptor2 = extract_superpoint_desc_keypoints(Net, img2, conf_threshold=1e-4, size=size)
     img1, img2 = image_preprocess(img1, size), image_preprocess(img2, size)
     match = nn_match_descriptor(descriptor1, descriptor2, nn_thresh=nn_thresh)
     match_desc1_idx = np.array(match[0, :], dtype=int)  # descriptor 1 matches
@@ -149,7 +149,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 # Net.load_state_dict(weight_dict)
 
 Net = SuperPointNetBatchNorm2()
-weight_dict = torch.load("../descriptorTrainingAfterIter2.pt", map_location=torch.device(device))
+weight_dict = torch.load("../descriptorTrainingAfterIter2my_loss.pt", map_location=torch.device(device))
 Net.load_state_dict(weight_dict)
 # Net = SuperPointNet_gauss2()
 # model_weights = torch.load("superPointNet_170000_checkpoint.pth.tar", map_location=device)
@@ -157,7 +157,7 @@ Net.load_state_dict(weight_dict)
 
 Net = Net.to(device)
 image1 = image_dir + "1.ppm"
-image2 = image_dir + "6.ppm"
+image2 = image_dir + "1.ppm"
 # desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
 combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.9, size=(856, 576))
 plt.imshow(combined)

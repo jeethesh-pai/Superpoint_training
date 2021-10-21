@@ -131,7 +131,7 @@ def append_csv(file='foo.csv', arr=[]):
 def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=True, translation=True,
                       n_scales=5, n_angles=25, scaling_amplitude=0.1, perspective_amplitude_x=0.1,
                       perspective_amplitude_y=0.1, patch_ratio=0.5, max_angle=np.pi / 2,
-                      allow_artifacts=False, translation_overflow=0.):
+                      allow_artifacts=False, translation_overflow=0.) -> torch.Tensor:
     """Sample a random valid homography.
     Computes the homography transformation between a random patch in the original image
     and a warped projection with the same image size.
@@ -224,10 +224,10 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
         idx = valid[np.random.randint(valid.shape[0], size=1)].squeeze().astype(int)
         pts2 = rotated[idx, :, :]
     # Rescale to actual size
-    shape = shape[::-1]  # different convention [y, x]
+    shape = shape[::-1]  # changing from convention [y,x] to [x,y] due to restriction from cv2 getPerspective
     pts1 *= shape[np.newaxis, :]
     pts2 *= shape[np.newaxis, :]
-    homography = cv2.getPerspectiveTransform(np.float32(pts1 + shift), np.float32(pts2 + shift))
+    homography = torch.from_numpy(cv2.getPerspectiveTransform(np.float32(pts1 + shift), np.float32(pts2 + shift)))
     return homography
 
 
@@ -283,6 +283,23 @@ def filter_points(points, shape, indicesTrue=False):
     return points_warp
 
 
+def filter_points_batch(points, shape):
+    #  check!
+    """
+    :param shape - tuple of (width, height)
+    :param points - tensor of size (B, Num_points, 2) points should be in (x, y) format
+    :return indices - indices which are valid in the given image dimension.
+    """
+    x_warp, y_warp = points[..., 0], points[..., 1]
+    cond_1 = torch.ge(x_warp, 0)
+    cond_2 = torch.less(x_warp, shape[0])
+    cond_3 = torch.ge(y_warp, 0)
+    cond_4 = torch.less(y_warp, shape[1])
+    cond_final = cond_1 * cond_2 * cond_3 * cond_4
+    indices = torch.where(cond_final)
+    return indices
+
+
 def warp_points(points, homographies, device='cpu'):
     """
     Warp a list of points with the given homography.
@@ -332,6 +349,40 @@ def warp_image_torch(img: torch.Tensor, inv_homography: torch.Tensor) -> torch.T
     return warped_img
 
 
+def my_inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
+    """
+    Inverse warp images in batch
+    :param img:
+        batch of images
+        tensor [batch_size, 1, H, W]
+    :param mat_homo_inv:
+        batch of homography matrices
+        tensor [batch_size, 3, 3]
+    :param device:
+        GPU device or CPU
+    :return:
+        batch of warped images
+        tensor [batch_size, 1, H, W]
+    """
+    # compute inverse warped points
+    if len(img.shape) == 3:
+        img = img.reshape((-1, 1, img.shape[1], img.shape[2]))
+
+    Batch, channel, H, W = img.shape
+    coor_cells = torch.stack(torch.meshgrid(torch.arange(W), torch.arange(H)), dim=2)
+    coor_cells = coor_cells.transpose(0, 1)
+    coor_cells = coor_cells.to(device)
+    coor_cells = coor_cells.contiguous()
+
+    src_pixel_coords = warp_points(coor_cells.view([-1, 2]), mat_homo_inv, device)
+    src_pixel_coords = 2 * src_pixel_coords / torch.Tensor([W, H]) + torch.Tensor([-1, -1])
+    src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
+    src_pixel_coords = src_pixel_coords.float()
+
+    warped_img = F.grid_sample(img, src_pixel_coords.to(device), mode=mode, align_corners=True)
+    return warped_img.to(device).squeeze()
+
+
 def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
     """
     Inverse warp images in batch
@@ -352,12 +403,13 @@ def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
         img = img.reshape((-1, 1, img.shape[1], img.shape[2]))
 
     Batch, channel, H, W = img.shape
-    coor_cells = torch.stack(torch.meshgrid(torch.linspace(-1, 1, W), torch.linspace(-1, 1, H)), dim=2)
+    coor_cells = torch.stack(torch.meshgrid(torch.arange(W), torch.arange(H)), dim=2)
     coor_cells = coor_cells.transpose(0, 1)
     coor_cells = coor_cells.to(device)
     coor_cells = coor_cells.contiguous()
 
     src_pixel_coords = warp_points(coor_cells.view([-1, 2]), mat_homo_inv, device)
+    src_pixel_coords = 2 * src_pixel_coords / torch.Tensor([W, H]) + torch.Tensor([-1, -1])
     src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
     src_pixel_coords = src_pixel_coords.float()
 
@@ -661,18 +713,6 @@ def detector_loss(target: torch.Tensor, output: torch.Tensor, device=torch.devic
     return {'loss': batch_mean_loss}
 
 
-def filter_points_batch(points, shape):
-    #  check!
-    x_warp, y_warp = points[..., 0], points[..., 1]
-    cond_1 = torch.ge(x_warp, 0)
-    cond_2 = torch.less(x_warp, shape[0])
-    cond_3 = torch.ge(y_warp, 0)
-    cond_4 = torch.less(y_warp, shape[1])
-    cond_final = cond_1 * cond_2 * cond_3 * cond_4
-    indices = torch.where(cond_final)
-    return indices
-
-
 @torch.enable_grad()
 def descriptor_loss_modified(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,
                              lambda_d: float, margin_pos: float, margin_neg: float, threshold=8, valid_mask=None):
@@ -687,7 +727,7 @@ def descriptor_loss_modified(descriptor: torch.Tensor, descriptor_warped: torch.
     coords = coords.reshape([-1, 2])
     warped_coord = warp_points(coords, homography)
     trueIdx = filter_points_batch(warped_coord, shape=(W, H))
-    s = torch.zeros(size=(batch_size, Hc*Wc, Hc*Wc), dtype=torch.float32)
+    s = torch.zeros(size=(batch_size, Hc*Wc, Hc*Wc), dtype=torch.float32, device=device)
     s[trueIdx[0], trueIdx[1], trueIdx[1]] = 1.0
     mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False, device=torch.device(device)).float()
     mask3D = torch.prod(mask3D, dim=1).to(device)
@@ -695,10 +735,8 @@ def descriptor_loss_modified(descriptor: torch.Tensor, descriptor_warped: torch.
     desc_product = desc_product.sum(dim=-1)
     positive_corr = torch.max(margin_pos * torch.ones_like(desc_product) - desc_product,
                               torch.zeros_like(desc_product))
-    ps_sum = torch.count_nonzero(positive_corr * s)
     negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
                               torch.zeros_like(desc_product))
-    neg_sum = torch.count_nonzero(negative_corr * (1-s))
     loss_desc = (lambda_d * s * positive_corr + (1 - s) * negative_corr) * mask3D.reshape([batch_size, 1, -1])
     return torch.mean(loss_desc.sum(dim=(1, 2)) / ((mask3D.sum(dim=(1, 2)) + 1) * (Hc * Wc) + 1))
 
