@@ -4,7 +4,7 @@ import numpy as np
 from torch.utils.data import Dataset
 import os
 from photometric import ImgAugTransform
-from utils import compute_valid_mask, sample_homography, warpLabels, warp_image, inv_warp_image_batch
+from utils import compute_valid_mask, sample_homography, warpLabels, inv_warp_image_batch
 from numpy.linalg import inv
 import re
 
@@ -56,26 +56,10 @@ class HPatches(Dataset):
         if sample['change'] == "viewpoint":
             for i in range(1, num_iter):
                 homography = np.loadtxt(os.path.join(self.image_path[index], f'H_1_{i + 1}'))
-                s = max(height / size_original[0][0], width / size_original[0][1])
-                # upscale = np.eye(3) * [1. / s, 1. / s, 1.]
-                # warped_s = max(height / size_original[i][0], width / size_original[i][1])
-                # downscale = np.eye(3) * [warped_s, warped_s, 1]
-                # pad_y = (size_original[0][0] * s - height) / 2
-                # pad_x = (size_original[0][1] * s - width) / 2
-                # translation = np.asarray([[1, 0, pad_x], [0, 1, pad_y], [0, 0, 1]], dtype=np.float32)
-                # pad_x = (size_original[i][1] * s - width) / 2  # warped pad_x
-                # pad_y = (size_original[i][0] * s - height) / 2  # warped_pad_y
-                # warped_translation = np.asarray([[1, 0, -pad_x], [0, 1, -pad_y], [0, 0, 1]], dtype=np.float32)
-                # temp_homography = warped_translation @ downscale @ homography @ upscale @ translation
-                scale_matrix = np.array([[1, 1, s], [1, 1, s], [1 / s, 1 / s, 1]])
-                temp_homography_2 = homography * scale_matrix
-                homographies[i, ...] = temp_homography_2
                 s = max(height / size_original[i][0], width / size_original[i][1])
-                scale_matrix = np.array([[1, 1, s], [1, 1, s], [1/s, 1/s, 1]])
-                temp_homography = homography * scale_matrix
+                scale_matrix = np.array([[1, 1, s], [1, 1, s], [1 / s, 1 / s, 1]])
                 homographies[i, ...] = homography * scale_matrix
         inv_homography = torch.as_tensor([inv(homographies[i, ...]) for i in range(num_iter)], dtype=torch.float32)
-        sample['warped_mask'] = compute_valid_mask(torch.tensor([height, width]), inv_homography=inv_homography)
         sample['homography'] = torch.from_numpy(homographies).type(torch.float32)
         sample['image'] = (torch.from_numpy(images) / 255.0).type(torch.float32)
         sample['inv_homography'] = inv_homography

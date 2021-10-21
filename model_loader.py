@@ -353,8 +353,8 @@ class SuperPointNetBatchNorm2(SuperPointNet):
             (_, semi), (_, desc) = self.forward(
                 torch.from_numpy(image[np.newaxis, np.newaxis, :, :])).items()
             heatmap = flattenDetection(semi).cpu().numpy().squeeze()
-            plt.imshow(heatmap, cmap='gray')
-            plt.show()
+            # plt.imshow(heatmap, cmap='gray')
+            # plt.show()
             xs, ys = np.where(heatmap >= conf_threshold)
             if len(xs) == 0:
                 return np.zeros((3, 0)), None, None

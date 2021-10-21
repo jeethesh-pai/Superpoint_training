@@ -1,8 +1,8 @@
 import torch
 import yaml
 from Data_loader import TLSScanData, points_to_2D
-from model_loader import SuperPointNet, load_model, detector_post_processing, SuperPointNetBatchNorm, semi_to_heatmap
-from utils import flattenDetection, warpLabels, get_grid, filter_points, warp_image, nms_fast, inv_warp_image_batch
+from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm, semi_to_heatmap
+from utils import nms_fast, inv_warp_image_batch
 from torchsummary import summary
 import os
 import numpy as np
@@ -16,7 +16,7 @@ warnings.simplefilter("ignore")
 parser = argparse.ArgumentParser(description="This scripts helps to generate pseudo ground truth label for Superpoint"
                                              "Homographic adaptation as mentioned in the paper")
 parser.add_argument('--config', help='Path to config file',
-                    default="../my_superpoint_pytorch/tls_scan_superpoint_config_file.yaml")
+                    default="tls_scan_superpoint_config_file.yaml")
 parser.add_argument('--split', help='dataset split - train/validation', default='train')
 args = parser.parse_args()
 
@@ -40,6 +40,7 @@ weights = load_model(config['pretrained'], Net)
 Net.load_state_dict(weights)
 Net.to(device)
 Net.train(mode=False)
+count = 0
 summary(Net, (1, size[1], size[0]), batch_size=1)  # shows the trained network architecture
 if config['data']['generate_label']:
     label_path = config['data']['label_path']
@@ -47,11 +48,13 @@ if config['data']['generate_label']:
         os.mkdir(label_path)
     tqdm_bar = tqdm.tqdm(data_loader)
     for sample in tqdm_bar:
+        count += batch_size
         tqdm_bar.set_description(f"{args.split} Labels being created...")
         agg_label = np.zeros_like(sample['image'])
         sample['image'] = sample['image'].to(device)
         sample['warped_image'] = sample['warped_image'].to(device).squeeze()  # squeeze the batch dimension as its 1
         sample['homography'] = sample['homography'].to(device)
+        sample['inv_homography'] = sample['inv_homography'].to(device)
         # to store the homographic detections for averaging the response
         # label = np.zeros((batch_size + numHomIter, size[1], size[0]), dtype=np.float32)
         with torch.no_grad():
@@ -64,11 +67,13 @@ if config['data']['generate_label']:
                 output_warped = Net(sample['warped_image'][batch, ...].unsqueeze(1))
                 semi_warped, _ = output_warped['semi'], output_warped['desc']
                 batch_heatmap = semi_to_heatmap(semi_warped)
-                new_label = inv_warp_image_batch(batch_heatmap, sample['homography'][batch, ...].unsqueeze(0),
+                new_label = inv_warp_image_batch(batch_heatmap, sample['inv_homography'][batch, ...].unsqueeze(1),
                                                  device=device).squeeze()
                 new_label = torch.cat([new_label, label[batch, :, :].to(device).unsqueeze(0)], dim=0)
                 new_label = torch.sum(new_label, dim=0)
                 agg_label[batch, ...] = new_label.to('cpu').numpy()
+                # plt.imshow(agg_label[batch, ...].squeeze(), cmap='gray')
+                # plt.show()
             for batch in range(sample['image'].shape[0]):
                 label = agg_label[batch, ...].squeeze()
                 xs, ys = np.where(label >= config['model']['detection_threshold'])  # Confidence threshold.
@@ -91,8 +96,10 @@ if config['data']['generate_label']:
                 pts = list(zip(pts[1], pts[0]))  # saves points in the form pts =
                 # (array(y axis coordinates), array(x axis coordinates))
                 filename = os.path.join(label_path, split, sample['name'][batch][:-4])
-                plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
-                                        img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
-                plt.show()
-                print('something')
+                # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
+                #                         img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
+                # plt.show()
+                # print('something')
                 # np.save(filename, pts)
+        if count > 5:
+            break

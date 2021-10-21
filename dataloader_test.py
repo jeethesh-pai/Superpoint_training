@@ -1,11 +1,9 @@
-import os
-
+import cv2
+import numpy as np
 import torch
-from Data_loader import TLSScanData
 import yaml
 from utils import inv_warp_image_batch
 from HPatches_dataset import HPatches
-from torchvision import transforms
 import matplotlib.pyplot as plt
 
 config_file_path = 'HPatches_config.yaml'
@@ -20,7 +18,7 @@ for k, sample in enumerate(train_loader):
         count = 0
         for i in range(2):
             for j in range(len(images) // 2):
-                axes[i, j].imshow(images[count, ...])
+                axes[i, j].imshow(images[count, ...], cmap='gray')
                 axes[i, j].set_title(f"{sample['name'][count][-5:]}")
                 count += 1
         images = torch.cat([sample['image'][0, 0, ...]]*(sample['image'].shape[1]), dim=0)
@@ -29,7 +27,21 @@ for k, sample in enumerate(train_loader):
         count = 0
         for i in range(2):
             for j in range(len(images) // 2):
-                axes2[i, j].imshow(fake_warp[count, ...])
+                axes2[i, j].imshow(fake_warp[count, ...], cmap='gray')
                 axes2[i, j].set_title(f"{sample['name'][count][-5:]}")
                 count += 1
+        # overlaying
+        images = sample['image'].numpy().squeeze() * 255
+        fake_warp = fake_warp.numpy()
+        new_images = np.zeros_like(images)
+        for i in range(images.shape[0]):
+            new_images[i, :, :] = cv2.addWeighted(images[i, :, :], 0.6, fake_warp[i, :, :], 0.2, 0)
+        fig3, axes3 = plt.subplots(2, len(images) // 2)
+        count = 0
+        for i in range(2):
+            for j in range(len(images) // 2):
+                axes3[i, j].imshow(new_images[count, ...], cmap='gray')
+                axes3[i, j].set_title(f"{sample['name'][count][-5:]}")
+                count += 1
+        plt.title("Overlaid_image")
         plt.show()

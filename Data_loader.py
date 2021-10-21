@@ -89,7 +89,7 @@ class TLSScanData(Dataset):
                 trueIdx = filter_points_batch(warped_points, (width, height))
                 warped_points_2D[trueIdx[0], warped_points[trueIdx[0], trueIdx[1], 1],
                                  warped_points[trueIdx[0], trueIdx[1], 0]] = 1.0
-                sample['warped_label'] = warped_points_2D.unsqueeze(0)
+                sample['warped_label'] = warped_points_2D
         sample['image'] = (image.unsqueeze(0) / 255.0)
         sample['name'] = self.image_list[index]
         return sample

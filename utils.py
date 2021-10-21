@@ -409,7 +409,7 @@ def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
     coor_cells = coor_cells.contiguous()
 
     src_pixel_coords = warp_points(coor_cells.view([-1, 2]), mat_homo_inv, device)
-    src_pixel_coords = 2 * src_pixel_coords / torch.Tensor([W, H]) + torch.Tensor([-1, -1])
+    src_pixel_coords = 2 * src_pixel_coords / torch.Tensor([W, H]).to(device) + torch.Tensor([-1, -1]).to(device)
     src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
     src_pixel_coords = src_pixel_coords.float()
 
@@ -719,9 +719,9 @@ def descriptor_loss_modified(descriptor: torch.Tensor, descriptor_warped: torch.
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     batch_size, size, Hc, Wc = descriptor_warped.shape
     H, W = Hc * 8, Wc * 8
-    valid_mask = torch.ones(size=(batch_size, H, W)) if valid_mask is None else valid_mask
-    if len(valid_mask.shape) == 3:
-        valid_mask = valid_mask.unsqueeze(1)
+    # valid_mask = torch.ones(size=(batch_size, H, W)) if valid_mask is None else valid_mask
+    # if len(valid_mask.shape) == 3:
+    #     valid_mask = valid_mask.unsqueeze(1)
     coords = torch.stack(torch.meshgrid(torch.arange(Wc), torch.arange(Hc)), dim=2)  # coordinates of Hc, Wc  grid
     coords = coords * 8 + 8 // 2  # to get the center coordinates of respective expanded image with (H,W)
     coords = coords.reshape([-1, 2])
@@ -729,16 +729,18 @@ def descriptor_loss_modified(descriptor: torch.Tensor, descriptor_warped: torch.
     trueIdx = filter_points_batch(warped_coord, shape=(W, H))
     s = torch.zeros(size=(batch_size, Hc*Wc, Hc*Wc), dtype=torch.float32, device=device)
     s[trueIdx[0], trueIdx[1], trueIdx[1]] = 1.0
-    mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False, device=torch.device(device)).float()
-    mask3D = torch.prod(mask3D, dim=1).to(device)
-    desc_product = descriptor.reshape([batch_size, -1, 1, size]) * descriptor_warped.reshape([batch_size, 1, -1, size])
-    desc_product = desc_product.sum(dim=-1)
+    s = s.reshape([batch_size, Hc, Wc, Hc, Wc])
+    descriptor = descriptor.reshape([batch_size, Hc, Wc, 1, 1, size])
+    descriptor_warped = descriptor_warped.reshape([batch_size, 1, 1, Hc, Wc, size])
+    desc_product = (descriptor * descriptor_warped).sum(dim=-1)
+    # mask3D = labels2Dto3D(valid_mask, cell_size=8, add_dustbin=False, device=torch.device(device)).float()
+    # mask3D = torch.prod(mask3D, dim=1).to(device)
     positive_corr = torch.max(margin_pos * torch.ones_like(desc_product) - desc_product,
                               torch.zeros_like(desc_product))
     negative_corr = torch.max(desc_product - margin_neg * torch.ones_like(desc_product),
                               torch.zeros_like(desc_product))
-    loss_desc = (lambda_d * s * positive_corr + (1 - s) * negative_corr) * mask3D.reshape([batch_size, 1, -1])
-    return torch.mean(loss_desc.sum(dim=(1, 2)) / ((mask3D.sum(dim=(1, 2)) + 1) * (Hc * Wc) + 1))
+    loss_desc = (lambda_d * s * positive_corr + (1 - s) * negative_corr)
+    return torch.mean(loss_desc.sum(dim=(1, 2, 3, 4)) / (Hc * Wc)**2)
 
 
 def descriptor_loss_2(descriptor: torch.Tensor, descriptor_warped: torch.Tensor, homography: torch.Tensor,
