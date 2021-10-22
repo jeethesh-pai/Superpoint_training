@@ -2,7 +2,7 @@ data:
     dataset: 'TLSScanData'
     generate_label: true
     labels: false
-    label_path: '../Dataset/MSCOCO/Labels_MSCOCOIter2'  # /content/drive/MyDrive/Label
+    label_path: '../Dataset/Labels_MSCOCOIter0_new_BN'  # /content/drive/MyDrive/Label
     # labels: "logs/magicpoint_tls_labels/predictions"
     root: '../Dataset/MSCOCO' # /content/MSCOCO
     detector_training: false
@@ -39,11 +39,11 @@ data:
                 params:
                     translation: true
                     rotation: true
-                    scaling: true
+                    scaling: false
                     perspective: true
                     scaling_amplitude: 0.5
-                    perspective_amplitude_x: 0.7
-                    perspective_amplitude_y: 0.7
+                    perspective_amplitude_x: 0.3
+                    perspective_amplitude_y: 0.3
                     allow_artifacts: true
                     patch_ratio: 0.95
                     max_angle: 0.785

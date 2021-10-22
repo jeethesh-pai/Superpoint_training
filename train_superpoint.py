@@ -81,13 +81,13 @@ size = config['data']['preprocessing']['resize']  # width, height
 train_set = TLSScanData(transform=None, task='train', **config)
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=False, prefetch_factor=2)
 # train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=False, pin_memory=True,
-#                                            prefetch_factor=4, num_workers=1)
+#                                            prefetch_factor=4, num_workers=2)
 val_set = TLSScanData(transform=None, task='validation', **config)
 val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=False,
                                          prefetch_factor=2)
 # val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=False,
-#                                          pin_memory=True, prefetch_factor=4, num_workers=1)
-Net = SuperPointNetBatchNorm()
+#                                          pin_memory=True, prefetch_factor=4, num_workers=2)
+Net = SuperPointNetBatchNorm2()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -96,12 +96,13 @@ Net.load_state_dict(model_weights)
 Net.to(device)
 summary(Net, (1, size[1], size[0]), batch_size=1)
 wrappedModel = ModelWrapper(Net)
+scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=2, verbose=True)
 if config['data']['detector_training']:  # we bootstrap the Superpoint detector using homographic adapted labels
     writer = SummaryWriter(log_dir="../logs/homoAdaptIter1")
     writer.add_graph(wrappedModel, input_to_model=torch.ones(size=(2, 1, size[1], size[0])).to(device))
     max_iter = config['train_iter']  # also called as epochs
     n_iter = 0
-    prev_val_loss = 0
+    prev_val_loss = None
     Net.train(mode=True)
     old_state_dict = {}
     new_state_dict = {}
@@ -123,25 +124,10 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
             det_out = detector_loss(sample['label'], semi, device=device)
             loss = det_out['loss']
             loss.backward()
-            # print('loss_grad:', loss.grad)
-            # print('semi_grad: ', semi.grad.abs().mean())
-            # det_out.backward(retain_graph=True)
-            # dot = make_dot(det_out, params=dict(Net.named_parameters()), show_attrs=True, show_saved=True)
-            # dot.format = 'png'
-            # dot.render('saved_path/torchviz_sample')
-            # plot_grad_flow(Net.named_parameters())
             optimizer.step()
             running_loss += loss.item()
             train_bar.set_description(f"Training Epoch -- {n_iter + 1} / {max_iter} - Loss: {running_loss / (i + 1)}")
-        running_val_loss, val_batch_iou = 0, 0
-        # plt.show()
-        # for key in Net.state_dict():
-        #     new_state_dict[key] = Net.state_dict()[key].clone()
-        # for key in old_state_dict:
-        #     if not (old_state_dict[key] == new_state_dict[key]).all():
-        #         print('Diff in {}'.format(key))
-        #     else:
-        #         print('same old shit')
+        running_val_loss = 0
         val_bar = tqdm.tqdm(val_loader)
         Net.train(mode=False)
         for j, val_sample in enumerate(val_bar):
@@ -154,18 +140,13 @@ if config['data']['detector_training']:  # we bootstrap the Superpoint detector 
             val_bar.set_description(f"Validation -- Epoch- {n_iter + 1} / {max_iter} - Validation loss: "
                                     f"{running_val_loss / (j + 1)}")
         running_val_loss /= len(val_loader)
-        if prev_val_loss == 0:
+        if prev_val_loss is None or prev_val_loss > running_val_loss:
             prev_val_loss = running_val_loss
             print('saving best model .... ')
-            torch.save(copy.deepcopy(Net.state_dict()), "../homoAdaptiter1.pt")
-        if prev_val_loss > running_val_loss:
-            torch.save(copy.deepcopy(Net.state_dict()), "../homoAdaptiter1.pt")
-            print('saving best model .... ')
-            prev_val_loss = running_val_loss
+            torch.save(copy.deepcopy(Net.state_dict()), "../homoAdaptiter1_BN.pt")
+        scheduler.step(prev_val_loss)
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
-        for key, values in copy.deepcopy(Net.state_dict()).items():
-            writer.add_histogram(key, values, n_iter + 1)
         writer.flush()
         n_iter += 1
 else:  # start descriptor training with the homographically adapted model
@@ -266,6 +247,7 @@ else:  # start descriptor training with the homographically adapted model
             prev_val_loss = running_val_loss
             print('saving best model .... ')
             torch.save(copy.deepcopy(Net.state_dict()), f"../descriptorTrainingAfterIter2myloss_{n_iter+1}.pt")
+        scheduler.step(prev_val_loss)
         writer.add_scalar('Loss', running_loss, n_iter + 1)
         writer.add_scalar('Val_loss', running_val_loss, n_iter + 1)
         writer.flush()

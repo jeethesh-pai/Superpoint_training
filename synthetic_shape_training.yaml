@@ -2,9 +2,9 @@ data:
     dataset: 'Synthetic-shape'
     generate_label: false
     labels: true
-    label_path: '../pytorch-superpoint/datasets/TLS_Train/synthetic_shapes_v6'
+    label_path: '../Dataset/synthetic_shapes_v6/synthetic_shapes_v6'
     # labels: "logs/magicpoint_tls_labels/predictions"
-    root: '../pytorch-superpoint/datasets/TLS_Train/synthetic_shapes_v6' # datasets/COCO
+    root: '../Dataset/synthetic_shapes_v6/synthetic_shapes_v6' # datasets/COCO
     detector_training: true
     gaussian_label:
         enable: true
@@ -17,7 +17,7 @@ data:
         # resize: [480, 640]
     augmentation:
         photometric:
-            enable: true
+            enable: false
             primitives: [
                 'random_brightness', 'random_contrast', 'additive_speckle_noise',
                 'additive_gaussian_noise', 'additive_shade', 'motion_blur']
@@ -63,10 +63,11 @@ model:
     }
     detector_loss:
         loss_type: 'softmax'
-    batch_size: 16 # 32
-    eval_batch_size: 16 # 32
+    batch_size: 1 # 32
+    eval_batch_size: 1 # 32
     learning_rate: 0.001 # 0.0001
     detection_threshold: 0.015 # 0.015
+    epsilon: 4
     lambda_loss: 1 # 1
     nms: 1
     dense_loss:
@@ -94,7 +95,7 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../my_superpoint_pytorch/superpoint_v1.pth"
+pretrained: "../magicpointBN_10_iter.pt"
 
 
 

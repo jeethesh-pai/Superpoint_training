@@ -2,7 +2,7 @@ import torch
 import yaml
 from Synthetic_dataset_loader import SyntheticDataset
 from HPatches_dataset import HPatches
-from model_loader import detector_post_processing, SuperPointNetBatchNorm, semi_to_heatmap
+from model_loader import detector_post_processing, SuperPointNetBatchNorm2, semi_to_heatmap
 from torchsummary import summary
 from Data_loader import TLSScanData
 from utils import inv_warp_image_batch, getPtsFromHeatmap
@@ -101,7 +101,7 @@ def compute_tp_fp(prediction, gt, prob_threshold=[0.015, 0.5], correct_distance=
 
 parser = argparse.ArgumentParser(description="This scripts helps to evaluate detector using different metrics")
 parser.add_argument('--config', help='Path to config file',
-                    default="HPatches_config.yaml")
+                    default="synthetic_shape_training.yaml")
 parser.add_argument('--epsilon',  help='threshold distance used to calculate repeatability', default=1, type=int)
 parser.add_argument('--repeatability',  help='Whether to calculate repeatability', default=True, type=bool)
 parser.add_argument('--mAP',  help='whether to calculate mAP', default=False, type=bool)
@@ -112,14 +112,14 @@ with open(config_file_path) as path:
 size = config['data']['preprocessing']['resize']
 epsilon = config['model']['epsilon']
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-model = SuperPointNetBatchNorm()
+model = SuperPointNetBatchNorm2()
 model_weights = torch.load(config['pretrained'], map_location=device)
 model.load_state_dict(model_weights)
 batch_size = config['model']['batch_size']
 model.to(device)
 summary(model, input_size=(1, size[0], size[1]))
-# data_set = SyntheticDataset(transform=None, task='test', **config)
-data_set = HPatches(transform=None, **config)
+data_set = SyntheticDataset(transform=None, task='test', **config)
+# data_set = HPatches(transform=None, **config)
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=False)
 tqdm_bar = tqdm.tqdm(data_loader)
 if args.mAP:
@@ -139,7 +139,7 @@ if args.mAP:
             # repeat_metric_list.append(repeatability(gt_keypoint, keypoints))
             # loc_error.append(localization_error(pred, sample['label'].numpy().squeeze()))
             true_positive, false_positive, ground_truth = compute_tp_fp(pred, sample['label'].numpy().squeeze(),
-                                                                        prob_threshold=thresh, correct_distance=5)
+                                                                        prob_threshold=thresh, correct_distance=epsilon)
             tp_array += true_positive
             fp_array += false_positive
             gt += ground_truth

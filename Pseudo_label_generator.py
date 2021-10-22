@@ -100,4 +100,4 @@ if config['data']['generate_label']:
                 #                         img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
                 # plt.show()
                 # print('something')
-                np.save(filename, pts)
+                # np.save(filename, pts)

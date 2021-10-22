@@ -139,7 +139,7 @@ def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
 
 
 #  "../pytorch-superpoint/datasets/TLS_Train/Train/"
-image_dir = "../Dataset/HPatches/i_ajuntament/"
+image_dir = "../Dataset/HPatches/v_churchill/"
 mscoco_image_dir = "../Dataset/MSCOCO/"
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -151,7 +151,7 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 # Net.load_state_dict(weight_dict)
 
 Net = SuperPointNetBatchNorm()
-weight_dict = torch.load("../descriptorTrainingAfterIter2myloss(1).pt", map_location=torch.device(device))
+weight_dict = torch.load("../descriptorTrainingAfterIter2myloss_1.pt", map_location=torch.device(device))
 Net.load_state_dict(weight_dict)
 # Net = SuperPointNet_gauss2()
 # model_weights = torch.load("superPointNet_170000_checkpoint.pth.tar", map_location=device)
@@ -168,7 +168,7 @@ homography = sample_homography(np.array([320, 216]), shift=0, scaling=True, pers
 # image2 = cv2.warpPerspective(image1, homography, flags=cv2.WARP_INVERSE_MAP+cv2.INTER_LINEAR, dsize=(320, 216))
 
 # desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
-combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.8, size=(856, 576), conf_threshold=0.0015)
+combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.4, size=(856, 576), conf_threshold=1e-3)
 plt.imshow(combined)
 plt.title('Correspondence Image')
 plt.show()

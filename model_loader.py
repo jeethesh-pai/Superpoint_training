@@ -1,7 +1,7 @@
 import torch
 import torchvision.models
 import matplotlib.pyplot as plt
-
+from collections import namedtuple
 from utils import detector_loss, descriptor_loss_2, flattenDetection, nms_fast
 import numpy as np
 
@@ -145,7 +145,7 @@ def detector_post_processing(semi: torch.Tensor, conf_threshold=0.015, NMS_dist=
     :param ret_heatmap - returns heatmap with size (Hc x 8, Wc x 8)
     :param limit_detection - total no. of detection which needs to be considered utmost.
     """
-    assert len(semi.squeeze().shape) == 3
+    assert len(semi.shape) > 3
     with torch.no_grad():
         SoftMax = torch.nn.Softmax(dim=0)  # apply softmax on the channel dimension with 65
         soft_output = SoftMax(semi.squeeze())

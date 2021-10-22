@@ -1,6 +1,6 @@
 import cv2
 import torch
-from model_loader import SuperPointNetBatchNorm2, semi_to_heatmap
+from model_loader import SuperPointNetBatchNorm, semi_to_heatmap
 from utils import sample_homography
 import numpy as np
 import cv2
@@ -20,16 +20,16 @@ def image_preprocess(file_name: str, size: tuple) -> np.ndarray:
 
 
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-Net = SuperPointNetBatchNorm2()
-weight_dict = torch.load("../descriptorTrainingAfterIter2myloss.pt", map_location=torch.device(device))
+Net = SuperPointNetBatchNorm()
+weight_dict = torch.load("../descriptorTrainingAfterIter2myloss_1.pt", map_location=torch.device(device))
 Net.load_state_dict(weight_dict)
 image_dir = "../Dataset/MSCOCO/Train/"
 image1 = image_dir + "COCO_train2014_000000000025.jpg"
 image1 = image_preprocess(image1, size=(640, 480))
 homography = sample_homography(np.array([320, 216]), shift=0, scaling=True, perspective=True,
-                               translation=True, patch_ratio=0.75, max_angle=0.785, rotation=True,
+                               translation=True, patch_ratio=0.85, max_angle=np.pi/4, rotation=True,
                                perspective_amplitude_x=0.1, perspective_amplitude_y=0.1, allow_artifacts=True,
-                               scaling_amplitude=0.8).numpy().squeeze()
+                               scaling_amplitude=0.1, translation_overflow=0.2).numpy().squeeze()
 image2 = cv2.warpPerspective(image1, homography, flags=cv2.WARP_INVERSE_MAP+cv2.INTER_LINEAR, dsize=(640, 480))
 fig, axes = plt.subplots(1, 2)
 axes[0].imshow(image1, cmap='gray')
