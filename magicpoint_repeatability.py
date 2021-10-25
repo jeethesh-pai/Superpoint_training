@@ -118,12 +118,13 @@ model.load_state_dict(model_weights)
 batch_size = config['model']['batch_size']
 model.to(device)
 summary(model, input_size=(1, size[0], size[1]))
-data_set = SyntheticDataset(transform=None, task='test', **config)
+data_set = TLSScanData(transform=None, task='val', **config)
+# data_set = SyntheticDataset(transform=None, task='test', **config)
 # data_set = HPatches(transform=None, **config)
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=False)
 tqdm_bar = tqdm.tqdm(data_loader)
 if args.mAP:
-    thresh = [0.015, 0.15, 0.25, 0.35, 0.45, 0.5, 0.65, 0.75]
+    thresh = [0.001, 0.002, 0.015]
     fp_array, tp_array = np.zeros_like(thresh), np.zeros_like(thresh)
     gt = 0
     count = 0

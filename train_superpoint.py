@@ -87,7 +87,7 @@ val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['ev
                                          prefetch_factor=2)
 # val_loader = torch.utils.data.DataLoader(val_set, batch_size=config['model']['eval_batch_size'], shuffle=False,
 #                                          pin_memory=True, prefetch_factor=4, num_workers=2)
-Net = SuperPointNetBatchNorm2()
+Net = SuperPointNetBatchNorm()
 optimizer = optim.Adam(Net.parameters(), lr=config['model']['learning_rate'])
 epochs = 0
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -181,10 +181,10 @@ else:  # start descriptor training with the homographically adapted model
             # axes[1, 0].imshow(sample['warped_image'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[0, 1].imshow(sample['label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
             # axes[1, 1].imshow(sample['warped_label'][0, 0, :, :].numpy().squeeze(), cmap='gray')
-            # fig, axes = plt.subplots(1, 2)
-            # axes[0].imshow(sample['image'].numpy().squeeze(), cmap='gray')
-            # axes[1].imshow(cv2.warpPerspective(sample['image'].numpy().squeeze(), sample['homography'].numpy().squeeze(),
-            #                                    flags=cv2.WARP_INVERSE_MAP+cv2.INTER_LINEAR, dsize=(320, 216)), cmap='gray')
+            # # fig, axes = plt.subplots(1, 2)
+            # # axes[0].imshow(sample['image'].numpy().squeeze(), cmap='gray')
+            # # axes[1].imshow(cv2.warpPerspective(sample['image'].numpy().squeeze(), sample['homography'].numpy().squeeze(),
+            # #                                    flags=cv2.WARP_INVERSE_MAP+cv2.INTER_LINEAR, dsize=(320, 216)), cmap='gray')
             # plt.show()
             sample['image'] = sample['image'].to(device)
             sample['label'] = sample['label'].to(device)
@@ -200,12 +200,12 @@ else:  # start descriptor training with the homographically adapted model
             semi_warped, desc_warp = out_warp['semi'], out_warp['desc']
             det_loss = detector_loss(sample['label'], semi, device=device)
             det_warp_loss = detector_loss(sample['warped_label'], semi_warped, device=device)
-            desc_loss = descriptor_loss_modified(desc, desc_warp, homography=sample['inv_homography'],
-                                                 margin_neg=config['model']['negative_margin'],
-                                                 margin_pos=config['model']['positive_margin'],
-                                                 lambda_d=config['model']['lambda_d'],
-                                                 threshold=config['model']['descriptor_dist'],
-                                                 valid_mask=sample['warped_mask'])
+            desc_loss = descriptor_loss_2(desc, desc_warp, homography=sample['inv_homography'],
+                                          margin_neg=config['model']['negative_margin'],
+                                          margin_pos=config['model']['positive_margin'],
+                                          lambda_d=config['model']['lambda_d'],
+                                          threshold=config['model']['descriptor_dist'],
+                                          valid_mask=sample['warped_mask'])
             total_loss = det_loss['loss'] + det_warp_loss['loss'] + config['model']['lambda_loss'] * desc_loss
             total_loss.backward()
             running_loss += total_loss.item()

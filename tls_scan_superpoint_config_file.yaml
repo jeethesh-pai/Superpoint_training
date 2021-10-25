@@ -39,14 +39,14 @@ data:
                 params:
                     translation: true
                     rotation: true
-                    scaling: false
+                    scaling: true
                     perspective: true
-                    scaling_amplitude: 0.5
+                    scaling_amplitude: 0.2
                     perspective_amplitude_x: 0.3
                     perspective_amplitude_y: 0.3
                     allow_artifacts: true
                     patch_ratio: 0.95
-                    max_angle: 0.785
+                    max_angle: 1.57
         valid_border_margin: 3
 
 front_end_model: 'Train_model_heatmap'  # 'Train_model_frontend'
@@ -61,13 +61,13 @@ model:
     name: 'SuperPointNet_pretrained'
     params: {
     }
-    top_k: 1000
+    top_k: 600
     detector_loss:
         loss_type: 'softmax'
     batch_size: 2 # 32
     eval_batch_size: 1 # 32
     learning_rate: 0.0001 # 0.0001
-    detection_threshold: 0.45 # 0.015
+    detection_threshold: 0.095 # 0.015
     lambda_loss: 1 # 1
     nms: 4
     dense_loss:
@@ -95,4 +95,4 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../magicpoint.pt"
+pretrained: "../homoAdaptiter0_BN.pt"

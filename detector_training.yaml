@@ -63,10 +63,11 @@ model:
     }
     detector_loss:
         loss_type: 'softmax'
-    batch_size: 4 # 32
-    eval_batch_size: 2 # 32
+    batch_size: 1 # 32
+    eval_batch_size: 1 # 32
     learning_rate: 0.001 # 0.0001
     detection_threshold: 0.35 # 0.015
+    epsilon: 4 # distance threshold for corner average precision calculation
     lambda_loss: 1 # 1
     nms: 1
     dense_loss:
@@ -94,7 +95,7 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../magicpointBN.pt"
+pretrained: "../homoAdaptiter0_BN.pt"
 
 
 

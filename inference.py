@@ -33,7 +33,7 @@ def offset_keypoint(keypoint: list, img1_shape: tuple) -> list:
 
 
 def extract_superpoint_desc_keypoints(model: torch.nn.Module, img: str, size: tuple,
-                                      conf_threshold=0.015, dist_thresh=3):
+                                      conf_threshold=0.015, dist_thresh=4):
     model.train(mode=False)
     img_gray = image_preprocess(img, size=size)
     keypoint, descriptor, heatmap = model.eval_mode(img_gray, conf_threshold, size[1], size[0], dist_thresh)
@@ -139,7 +139,7 @@ def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
 
 
 #  "../pytorch-superpoint/datasets/TLS_Train/Train/"
-image_dir = "../Dataset/HPatches/v_churchill/"
+image_dir = "../Dataset/HPatches/i_ajuntament/"
 mscoco_image_dir = "../Dataset/MSCOCO/"
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -150,8 +150,8 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 # weight_dict = torch.load(checkpoint_path)
 # Net.load_state_dict(weight_dict)
 
-Net = SuperPointNetBatchNorm()
-weight_dict = torch.load("../descriptorTrainingAfterIter2myloss_1.pt", map_location=torch.device(device))
+Net = SuperPointNetBatchNorm2()
+weight_dict = torch.load("../descriptorTrainingAfterIter2_2.pt", map_location=torch.device(device))
 Net.load_state_dict(weight_dict)
 # Net = SuperPointNet_gauss2()
 # model_weights = torch.load("superPointNet_170000_checkpoint.pth.tar", map_location=device)
@@ -168,7 +168,7 @@ homography = sample_homography(np.array([320, 216]), shift=0, scaling=True, pers
 # image2 = cv2.warpPerspective(image1, homography, flags=cv2.WARP_INVERSE_MAP+cv2.INTER_LINEAR, dsize=(320, 216))
 
 # desc1, desc2 = draw_matches_superpoint_Sift(image1, image2, size=(856, 576))
-combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.4, size=(856, 576), conf_threshold=1e-3)
+combined, key = draw_matches_superpoint(image1, image2, nn_thresh=0.4, size=(856, 576), conf_threshold=0.095)
 plt.imshow(combined)
 plt.title('Correspondence Image')
 plt.show()

@@ -219,6 +219,34 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
     return homography, torch_hom
 
 
+img = np.ones(shape=(16, 16, 3), dtype=np.float32)
+img[...] = (255.0, 255.0, 0.0)
+homography = np.eye(3, dtype=np.float32)
+homography[0, 2] = -8
+warped_img = inv_warp_image_batch(torch.from_numpy(img[np.newaxis, ...]), torch.from_numpy(homography)).numpy().squeeze()
+coords = np.stack(np.meshgrid(np.arange(img.shape[1] // 8), np.arange(img.shape[0] // 8)), axis=2).astype(np.float32)
+Hc, Wc = img.shape[0] // 8, img.shape[1] // 8
+coords = coords * 8 + 8 // 2
+coords = coords.reshape([-1, 2])
+warped_coords = warp_points(torch.from_numpy(coords), torch.linalg.inv(torch.from_numpy(homography))).numpy()
+warped_filter = filter_points(warped_coords, shape=(img.shape[1], img.shape[0]), indicesTrue=True)
+# warped_coords_img = np.stack([warped_coords[:, 1], warped_coords[:, 0]], axis=-1)
+coords_img = np.stack([coords[:, 1], coords[:, 0]], axis=-1).astype(np.int)
+warped_coords_img = np.stack([warped_coords[:, 1], warped_coords[:, 0]], axis=-1).astype(np.int)
+img[coords_img[:, 0], coords_img[:, 1]] = (255, 0, 0)
+warped_img[warped_coords_img[warped_filter[0], 0], warped_coords_img[warped_filter[0], 1]] = (255, 0, 0)
+warped_coords_img = warped_coords_img.reshape([Hc, Wc, 1, 1, 2])
+coords_img = coords_img.reshape([1, 1, Hc, Wc, 2])
+s = np.linalg.norm(coords_img - warped_coords_img, axis=-1)
+desc_warped = np.array([[0, 1], [-9, 8], [4, 5], [6, 7]])
+desc_coord = np.array([[8, 9], [10, 11], [-7, 6], [14, 15]])
+desc_warped_img = desc_warped.reshape([1, 1, Hc, Wc, 2])
+desc_coord_img = desc_coord.reshape([Hc, Wc, 1, 1, 2])
+desc_product = desc_coord_img * desc_warped_img
+desc_product = desc_product.sum(-1)
+s_reshape = s <= 8
+mask_where = np.nonzero(s_reshape)
+
 config_file = "joint_training.yaml"
 with open(config_file) as file:
     config = yaml.full_load(file)
@@ -231,13 +259,14 @@ warped_pair_params = config['data']['augmentation']['homographic']['homographies
 coords = np.stack(np.meshgrid(np.arange(img.shape[1]//8), torch.arange(img.shape[0]//8)), axis=2).astype(dtype=np.float32)
 coords = np.transpose(coords, axes=(1, 0, 2))
 coords = coords * 8 + 8 // 2
-homography, torch_hom = sample_homography(np.array([img.shape[0], img.shape[1]]), shift=0, scaling=True, perspective=True,
-                                          translation=True, patch_ratio=1, max_angle=0.785, rotation=True,
-                                          perspective_amplitude_x=0.7, perspective_amplitude_y=0.7, allow_artifacts=True,
-                                          scaling_amplitude=0.5)
+# homography, torch_hom = sample_homography(np.array([img.shape[0], img.shape[1]]), shift=0, scaling=True, perspective=True,
+#                                           translation=True, patch_ratio=0.85, max_angle=0.785, rotation=True,
+#                                           perspective_amplitude_x=0.3, perspective_amplitude_y=0.3, allow_artifacts=True,
+#                                           scaling_amplitude=0.2)
 
-# homography = np.eye(3).astype(np.float32)
-# homography[0, 2] = 2
+torch_hom = torch.eye(3, dtype=torch.float32)
+torch_hom[0, 2] = -10
+homography = torch_hom.numpy()
 torch_inv = my_inv_warp_image_batch(torch.from_numpy(img[np.newaxis, np.newaxis, ...]).type(torch.float32),
                                     torch_hom.type(torch.float32)).unsqueeze(0)
 torch_orig = my_inv_warp_image_batch(torch_inv.unsqueeze(0), torch.linalg.inv(torch_hom).type(torch.float32))
@@ -257,27 +286,42 @@ torch_inv[warped_coords_masked[:, 1], warped_coords_masked[:, 0]] = 255
 concat_img = np.hstack([orig_image, inv_img])
 warped_coords_masked[:, 0] += img.shape[1]
 coords_masked = coords.squeeze()[warp_mask[0]].astype(np.int)
-concat_img = cv2.line(concat_img, coords_masked[0, :], warped_coords_masked[0, :], 255, 1)
-concat_img = cv2.line(concat_img, coords_masked[-1, :], warped_coords_masked[-1, :], 255, 1)
-concat_img = cv2.line(concat_img, coords_masked[-10, :], warped_coords_masked[-10, :], 255, 1)
-concat_img = cv2.line(concat_img, coords_masked[-48, :], warped_coords_masked[-48, :], 255, 1)
-concat_img = cv2.line(concat_img, coords_masked[20, :], warped_coords_masked[20, :], 255, 1)
-concat_img = cv2.line(concat_img, coords_masked[100, :], warped_coords_masked[100, :], 255, 1)
+# concat_img = cv2.line(concat_img, coords_masked[0, :], warped_coords_masked[0, :], 255, 1)
+# concat_img = cv2.line(concat_img, coords_masked[-1, :], warped_coords_masked[-1, :], 255, 1)
+# concat_img = cv2.line(concat_img, coords_masked[-10, :], warped_coords_masked[-10, :], 255, 1)
+# concat_img = cv2.line(concat_img, coords_masked[-48, :], warped_coords_masked[-48, :], 255, 1)
+# concat_img = cv2.line(concat_img, coords_masked[20, :], warped_coords_masked[20, :], 255, 1)
+# concat_img = cv2.line(concat_img, coords_masked[100, :], warped_coords_masked[100, :], 255, 1)
 # for i in range(coords_masked.shape[0]):
 #     concat_img = cv2.line(concat_img, coords_masked[i, :], warped_coords_masked[i, :], 255, 1)
 fig, axes = plt.subplots(1, 3)
 axes[0].imshow(orig_image, cmap='gray')
 axes[1].imshow(inv_img, cmap='gray')
 axes[2].imshow(img, cmap='gray')
-plt.figure(figsize=(12, 12))
-plt.imshow(concat_img, cmap='gray')
 fig, axes = plt.subplots(1, 2)
 axes[0].imshow(torch_orig, cmap='gray')
 axes[1].imshow(torch_inv, cmap='gray')
 plt.show()
+norm_unmasked = coords - warped_coord
 norm = np.linalg.norm(coords - warped_coord, axis=-1)
 norm_min = np.amin(norm, axis=-1)
-true_correspondence = norm_min <= 8
+true_correspondence = (norm <= 8).astype(np.int)
+true_idx = np.nonzero(true_correspondence)
+coords = coords.squeeze()
+warped_coord = warped_coord.squeeze().astype(np.int)
+true_idx_x = true_idx[0][10]
+true_idx_y = true_idx[1][np.where(true_idx[0] == true_idx_x)[0]]
+true_idx_y_masked = []
+for i in true_idx_y:
+    for j in warp_mask[0]:
+        if i == j:
+            true_idx_y_masked.append(i)
+warped_coord[:, 0] += img.shape[1]
+for j in true_idx_y_masked:
+    concat_img = cv2.line(concat_img, coords[true_idx_x, :], warped_coord[j, :], 255, 1)
+plt.figure(figsize=(12, 12))
+plt.imshow(concat_img, cmap='gray')
+plt.show()
 true_points = np.arange(9)
 norm_argmin = np.argmin(norm, axis=-1)
 mask = np.zeros_like(norm)

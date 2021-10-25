@@ -1,7 +1,7 @@
 import torch
 import yaml
 from Data_loader import TLSScanData, points_to_2D
-from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm, semi_to_heatmap
+from model_loader import SuperPointNet, load_model, SuperPointNetBatchNorm2, semi_to_heatmap
 from utils import nms_fast, inv_warp_image_batch
 from torchsummary import summary
 import os
@@ -35,7 +35,7 @@ data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuff
 # include num_workers if trained on GPU
 # Net = SuperPointNet()
 # Net.load_state_dict(weight_dict)
-Net = SuperPointNetBatchNorm()
+Net = SuperPointNetBatchNorm2()
 weights = load_model(config['pretrained'], Net)
 Net.load_state_dict(weights)
 Net.to(device)
@@ -100,4 +100,4 @@ if config['data']['generate_label']:
                 #                         img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
                 # plt.show()
                 # print('something')
-                # np.save(filename, pts)
+                np.save(filename, pts)

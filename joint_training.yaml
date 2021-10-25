@@ -40,8 +40,8 @@ data:
                 params:
                     translation: true
                     rotation: true
-                    scaling: true
-                    perspective: true
+                    scaling: false
+                    perspective: false
                     scaling_amplitude: 0.5
                     perspective_amplitude_x: 0.7
                     perspective_amplitude_y: 0.7
