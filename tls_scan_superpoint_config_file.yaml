@@ -2,9 +2,9 @@ data:
     dataset: 'TLSScanData'
     generate_label: true
     labels: false
-    label_path: '../Dataset/Labels_MSCOCOIter0_new_BN'  # /content/drive/MyDrive/Label
+    label_path: '../Dataset/TLS_Dataset/Label'  # /content/drive/MyDrive/Label
     # labels: "logs/magicpoint_tls_labels/predictions"
-    root: '../Dataset/MSCOCO' # /content/MSCOCO
+    root: '../Dataset/TLS_Dataset' # /content/MSCOCO
     detector_training: false
     gaussian_label:
         enable: true
@@ -13,7 +13,7 @@ data:
             GaussianBlur: {sigma: 0.2}
     cache_in_memory: false
     preprocessing:
-        resize: [320, 216]  # width, height
+        resize: [768, 512]  # width, height
         # resize: [480, 640]
     augmentation:
         photometric:
@@ -67,7 +67,7 @@ model:
     batch_size: 2 # 32
     eval_batch_size: 1 # 32
     learning_rate: 0.0001 # 0.0001
-    detection_threshold: 0.095 # 0.015
+    detection_threshold: 0.015 # 0.015
     lambda_loss: 1 # 1
     nms: 4
     dense_loss:
@@ -95,4 +95,4 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../homoAdaptiter0_BN.pt"
+pretrained: "superpoint_v1.pth"

@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from collections import namedtuple
 from utils import detector_loss, descriptor_loss_2, flattenDetection, nms_fast
 import numpy as np
+from torchsummary import summary
 
 
 class SuperPointNet(torch.nn.Module):
@@ -433,7 +434,7 @@ class down(torch.nn.Module):
 class SuperPointNet_gauss2(torch.nn.Module):
     """ Pytorch definition of SuperPoint Network. """
 
-    def __init__(self, subpixel_channel=1):
+    def __init__(self):
         super(SuperPointNet_gauss2, self).__init__()
         c1, c2, c3, c4, c5, d1 = 64, 64, 128, 128, 256, 256
         det_h = 65
@@ -544,3 +545,35 @@ class ModelWrapper(torch.nn.Module):
             data = tuple(data)
 
         return data
+
+
+class ResNetSuperPoint(torch.nn.Module):
+    """defines ResNet backbone for Superpoint uses first three layers of Resnet50"""
+    def __init__(self):
+        super(ResNetSuperPoint, self).__init__()
+        self.resnet = torchvision.models.resnet50(pretrained=False)
+        self.resnet.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+        self.conv1 = self.resnet.conv1
+        self.bn1 = self.resnet.bn1
+        self.maxpool1 = self.resnet.maxpool
+        self.relu1 = self.resnet.relu
+
+        # encoder
+        self.layer1 = self.resnet.layer1
+        self.layer2 = self.resnet.layer2
+        # Detector Head.
+        self.convPa = torch.nn.Sequential(
+            torch.nn.Conv2d(512, 256, kernel_size=(3, 3), stride=(1, 1), padding=1, bias=False),
+            torch.nn.BatchNorm2d(num_features=256), torch.nn.ReLU(inplace=True))
+        self.convPb = torch.nn.Conv2d(256, 65, kernel_size=(1, 1), stride=(1, 1), padding=0)
+
+    def forward(self, x):
+        x = self.relu1(self.bn1(self.conv1(x)))
+        x = self.maxpool1(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.convPa(x)
+        semi = self.convPb(x)
+        return {"semi": semi}
+
+

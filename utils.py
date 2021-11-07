@@ -349,7 +349,7 @@ def warp_image_torch(img: torch.Tensor, inv_homography: torch.Tensor) -> torch.T
     return warped_img
 
 
-def my_inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
+def my_inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear', target_size=None):
     """
     Inverse warp images in batch
     :param img:
@@ -360,6 +360,8 @@ def my_inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
         tensor [batch_size, 3, 3]
     :param device:
         GPU device or CPU
+    :param mode - interpolation mode
+    :param target_size - size to be warped tuple of (height, width)
     :return:
         batch of warped images
         tensor [batch_size, 1, H, W]
@@ -369,13 +371,15 @@ def my_inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
         img = img.reshape((-1, 1, img.shape[1], img.shape[2]))
 
     Batch, channel, H, W = img.shape
+    if target_size:
+        H, W = target_size
     coor_cells = torch.stack(torch.meshgrid(torch.arange(W), torch.arange(H)), dim=2)
     coor_cells = coor_cells.transpose(0, 1)
     coor_cells = coor_cells.to(device)
     coor_cells = coor_cells.contiguous()
 
     src_pixel_coords = warp_points(coor_cells.view([-1, 2]), mat_homo_inv, device)
-    src_pixel_coords = 2 * src_pixel_coords / torch.Tensor([W, H]) + torch.Tensor([-1, -1])
+    src_pixel_coords = 2 * src_pixel_coords / torch.Tensor([W, H]) + torch.Tensor([-1, -1])  # normalizing points
     src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
     src_pixel_coords = src_pixel_coords.float()
 
@@ -409,6 +413,7 @@ def inv_warp_image_batch(img, mat_homo_inv, device='cpu', mode='bilinear'):
     coor_cells = coor_cells.contiguous()
 
     src_pixel_coords = warp_points(coor_cells.view([-1, 2]), mat_homo_inv, device)
+    # normalize the pixels in order to feed the grid_sample method
     src_pixel_coords = 2 * src_pixel_coords / torch.Tensor([W, H]).to(device) + torch.Tensor([-1, -1]).to(device)
     src_pixel_coords = src_pixel_coords.view([Batch, H, W, 2])
     src_pixel_coords = src_pixel_coords.float()

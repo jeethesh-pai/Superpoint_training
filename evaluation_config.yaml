@@ -1,9 +1,9 @@
 data:
-    root: '../Dataset/MSCOCO' # # /content/drive/MyDrive
-    labels: true
+    root: '../Dataset/TLS_Dataset' # # /content/drive/MyDrive
+    labels: false
     label_path: '../Dataset/Labels_MSCOCOIter2'  # /content/drive/MyDrive/Label
     preprocessing:
-        resize: [320, 216]  # width, height
+        resize: [384, 256]  # width, height
         # resize: [480, 640]
     augmentation:
         photometric:
@@ -29,9 +29,9 @@ data:
                 params:
                     translation: true
                     rotation: true
-                    scaling: false
+                    scaling: true
                     perspective: true
-                    scaling_amplitude: 0.5
+                    scaling_amplitude: 0.2
                     perspective_amplitude_x: 0.3
                     perspective_amplitude_y: 0.3
                     allow_artifacts: true
@@ -42,9 +42,9 @@ data:
 model:
     batch_size: 1 # 32
     detection_threshold: 0.015 # 0.015
-    nms: 1
+    nms: 4
     descriptor_dist: 8 # 4, 7.5
-    epsilon: 3
+    epsilon: 5
 
 pretrained: "../homoAdaptiter2.pt"
 

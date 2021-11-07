@@ -1,8 +1,8 @@
 import torch
 import yaml
 from Data_loader import TLSScanData, points_to_2D
-from model_loader import SuperPointNet, detector_post_processing, SuperPointNetBatchNorm2, ModelWrapper
-from utils import flattenDetection, warpLabels, get_grid, filter_points, nms_fast
+from model_loader import SuperPointNet, detector_post_processing, SuperPointNetBatchNorm, ModelWrapper, semi_to_heatmap
+from utils import flattenDetection, warpLabels, get_grid, filter_points, inv_warp_image_batch, getPtsFromHeatmap
 from torchsummary import summary
 import os
 import numpy as np
@@ -26,14 +26,27 @@ def repeatability(pts1, pts2, correct_distance=3):
     pts1 = pts1[np.newaxis, ...]
     pts2 = pts2[:, np.newaxis, :]
     dist = np.linalg.norm(pts1 - pts2, axis=2)
+    count1, count2 = 0, 0
+    loc_err1, loc_err2 = 0, 0
     if N1 != 0:
         min_dist = np.min(dist, axis=1)
         count1 = np.sum(min_dist <= correct_distance)
+        loc_err1 = min_dist[min_dist <= correct_distance]
     if N2 != 0:
         min_dist = np.min(dist, axis=0)
         count2 = np.sum(min_dist <= correct_distance)
-    repeatability_metric = (count1 + count2) / (N1 + N2)
-    return repeatability_metric
+        loc_err2 = min_dist[min_dist <= correct_distance]
+    if N1 + N2 > 0:
+        repeatability_metric = (count1 + count2) / (N1 + N2)
+        if count1 + count2 > 0:
+            localization_err = 0
+            if loc_err1 is not None:
+                localization_err += (loc_err1.sum()) / (count1 + count2)
+            if loc_err2 is not None:
+                localization_err += (loc_err2.sum()) / (count1 + count2)
+    else:
+        repeatability_metric = 0
+    return repeatability_metric, localization_err
 
 
 parser = argparse.ArgumentParser(description="This scripts helps to evaluate detector using different metrics")
@@ -45,43 +58,52 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 config_file_path = args.config
 with open(config_file_path) as path:
     config = yaml.load(path)
-model = SuperPointNetBatchNorm2()
+model = SuperPointNetBatchNorm()
 size = config['data']['preprocessing']['resize']
 epsilon = config['model']['epsilon']
-model_weights = torch.load(config['pretrained'])
+nms = config['model']['nms']
+model_weights = torch.load(config['pretrained'], map_location=device)
 model.load_state_dict(model_weights)
+thresh = config['model']['detection_threshold']
 batch_size = config['model']['batch_size']
 model.to(device)
 summary(model, input_size=(1, size[0], size[1]))
-data_set = TLSScanData(transform=None, task='val', **config)
+data_set = TLSScanData(transform=None, task='test', **config)
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=False)
 tqdm_bar = tqdm.tqdm(data_loader)
-repeat_metric_list = []
+repeat_metric_list, loc_error_list = [], []
 model.train(mode=False)
+tqdm_bar.set_description("Evaluation of Detector")
 for sample in tqdm_bar:
-    tqdm_bar.set_description("Evaluation of Detector")
     W, H = config['data']['preprocessing']['resize']
     sample['image'] = sample['image'].to(device)
-    sample['warped_image'] = sample['warped_image'].to(device)
+    sample['warped_image'] = sample['warped_image'].to(device).unsqueeze(0)  # introduce batch dimension
     with torch.no_grad():
         output = model(sample['image'])
         semi = output['semi']
         output_warped = model(sample['warped_image'])
         semi_warped = output_warped['semi']
-        keypoints = detector_post_processing(semi, conf_threshold=0.015, NMS_dist=1, limit_detection=600)
-        keypoints = np.asarray(list(zip(keypoints[1], keypoints[0])), dtype=np.int)
-        keypoints_true_warp = warpLabels(keypoints, sample['homography'], H, W)
-        keypoints_warped = detector_post_processing(semi_warped, conf_threshold=0.015, NMS_dist=1, limit_detection=600)
-        # pts = list(zip(keypoints_warped[1], keypoints_warped[0]))
-        # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
-        #                         img=sample['warped_image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
+        keypoints = detector_post_processing(semi, thresh, NMS_dist=nms, limit_detection=600)
+        keypoints = np.stack([keypoints[0, :], keypoints[1, :]], axis=-1).astype(np.int)
+        heatmap_warped = semi_to_heatmap(semi_warped)
+        heatmap_warped = heatmap_warped.unsqueeze(0).unsqueeze(1)
+        heatmap_unwarped = inv_warp_image_batch(heatmap_warped, sample['inv_homography'], device=device)
+        keypoints_unwarped = getPtsFromHeatmap(heatmap_unwarped, thresh, nms_dist=nms,
+                                               limit_detection=600)
+        keypoints_unwarped = np.stack([keypoints_unwarped[0, :], keypoints_unwarped[1, :]], axis=-1).astype(np.int)
+        # pts = list(zip(keypoints_unwarped[:, 1], keypoints_unwarped[:, 0]))
+        # fig, axes = plt.subplots(1, 2)
+        # axes[0].imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
+        #                             img=sample['image'][0, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
+        # pts = list(zip(keypoints[:, 1], keypoints[:, 0]))
+        # axes[1].imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
+        #                             img=sample['image'][0, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
         # plt.show()
-        # plt.imshow(points_to_2D(np.asarray(keypoints_true_warp, dtype=np.int16), H, W,
-        #                         img=sample['warped_image'].to('cpu').numpy().squeeze() * 255), cmap='gray')
-        # plt.show()
-        keypoints_warped = keypoints_warped[:2, :].reshape(-1, 2)
-        repeat_metric_list.append(repeatability(keypoints_true_warp, keypoints_warped))
-        tqdm_bar.set_description(f"Repeatability -- {np.mean(repeat_metric_list)} ")
+        repeatable, loc_error = repeatability(keypoints, keypoints_unwarped, correct_distance=epsilon)
+        repeat_metric_list.append(repeatable)
+        loc_error_list.append(loc_error)
+    tqdm_bar.set_description(f"Repeatability -- {np.mean(repeat_metric_list)}, "
+                             f"Localization Error: {np.mean(loc_error_list)}")
 print('Mean repeatability: ', np.mean(repeat_metric_list))
 
 

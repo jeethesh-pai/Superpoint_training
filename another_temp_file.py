@@ -111,22 +111,74 @@ def sample_homography(shape, shift=0, perspective=True, scaling=True, rotation=T
     return homography
 
 
-img = cv2.imread("C:/Users/Jeethesh/Desktop/Studienarbeit_articles/deep learning based co-registration/deep learning "
-                 "based co-registration/Dataset/MSCOCO/Train/COCO_train2014_000000000009.jpg")
-img_2 = cv2.imread("C:/Users/Jeethesh/Desktop/Studienarbeit_articles/deep learning based co-registration/deep learning "
-                   "based co-registration/Dataset/MSCOCO/Train/COCO_train2014_000000000025.jpg")
+def Hpatches_preprocessing(image: np.ndarray, target_size: tuple, source_image_resolution: tuple):
+    """
+    :param image:- image to be processed
+    :param target_size:- tuple containing target size (height, width)
+    :param source_image_resolution - tuple (height, width) of original image.
+    """
+    fit_height = target_size[0]/image.shape[0] > target_size[1]/image.shape[1]
+    scale = target_size[0] / image.shape[0] if fit_height else target_size[1] / image.shape[1]
+
+    if source_image_resolution is not None:
+        scale = target_size[0] / source_image_resolution[0] if fit_height else target_size[1] / source_image_resolution[1]
+
+    new_size = (int(image.shape[1]*scale), int(image.shape[0]*scale))
+    image_resized = cv2.resize(image, new_size)
+
+    if fit_height:
+        image_cropped = image_resized[:, :target_size[1]]
+    else:
+        image_cropped = image_resized[:target_size[0], :]
+    return image_resized, image_cropped
+
+
+def adapt_homography_to_preprocessing(source_size: tuple, hom: np.ndarray, target_size: tuple):
+    """
+    returns corrected homography for the new size
+    :param source_size - size of the original image tuple - (height, width)
+    :param target_size -  size of the target image tuple - (height, width)
+    :param hom - homography matrix which is to be corrected
+    :param warped_source_size - size of the original warped image (height,width)
+    """
+    scale = np.amax(np.divide(target_size, source_size))
+    # scale_warped = np.amax(np.divide(target_size, warped_source_size))
+    fit_height = (target_size[0] / source_size[0]) > (target_size[1] / source_size[1])
+    padding_x, padding_y = 0, 0
+    if fit_height:
+        padding_x = int((source_size[1] * scale - target_size[1]) / 2)
+    else:
+        padding_y = int((source_size[0] * scale - target_size[0]) / 2)
+    t_mat = np.vstack([[1, 0, padding_x], [0, 1, padding_y], [0, 0, 1]])
+    # warped_padding_x = int((warped_source_size[1] * scale_warped - target_size[1]) / 2)
+    # warped_padding_y = int((warped_source_size[0] * scale_warped - target_size[0]) / 2)
+    # warped_t_mat = np.vstack([[1, 0, -warped_padding_x], [0, 1, -warped_padding_y], [0, 0, 1]])
+    downscale = np.diag([1 / scale, 1 / scale, 1.0]).astype(np.float32)
+    upscale = np.diag([scale, scale, 1.0]).astype(np.float32)
+    # scale_matrix = np.array([[1, 1, scale], [1, 1, scale], [1 / scale, 1 / scale, 1]])
+    actual_hom = upscale @ hom @ downscale @ t_mat
+    return actual_hom
+
+
+img_dir = "../Dataset/HPatches/v_talent/"
+img = cv2.imread(img_dir + "1.ppm")
+img_2 = cv2.imread(img_dir + "2.ppm")
 img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 img_2 = cv2.cvtColor(img_2, cv2.COLOR_BGR2GRAY)
-orig_image = np.copy(img)
-homography = sample_homography(np.array([img.shape[0], img.shape[1]]), shift=0, scaling=True, perspective=True,
-                               translation=True, patch_ratio=0.85, max_angle=0.785, rotation=True,
-                               perspective_amplitude_x=0.5, perspective_amplitude_y=0.5, allow_artifacts=True,
-                               scaling_amplitude=0.5)
-inv_img = warp_image_cv2(img, homography)
-img = warp_image_cv2(inv_img, np.linalg.inv(homography))
-fig, axes = plt.subplots(1, 3)
-axes[0].imshow(orig_image, cmap='gray')
-axes[1].imshow(inv_img, cmap='gray')
-axes[2].imshow(img, cmap='gray')
+# homography = sample_homography(np.array([img.shape[0], img.shape[1]]), shift=0, scaling=True, perspective=True,
+#                                translation=True, patch_ratio=0.85, max_angle=0.785, rotation=True,
+#                                perspective_amplitude_x=0.5, perspective_amplitude_y=0.5, allow_artifacts=True,
+#                                scaling_amplitude=0.5)
+homography = np.loadtxt(img_dir + "H_1_2")
+img_resized, img_cropped = Hpatches_preprocessing(img, (480, 640), None)
+img2_resized, img2_cropped = Hpatches_preprocessing(img_2, (480, 640), img.shape)
+new_hom = adapt_homography_to_preprocessing(img_2.shape, homography, img2_resized.shape)
+warped_img = cv2.warpPerspective(img_resized, new_hom, dsize=(img2_resized.shape[1], img2_resized.shape[0]),
+                                 flags=cv2.INTER_LINEAR)
+new_overlay = cv2.addWeighted(warped_img, 0.5, img2_resized, 0.5, 0)
+fig, axes = plt.subplots(2, 2)
+axes[0, 0].imshow(warped_img, cmap='gray')
+axes[0, 1].imshow(img_resized, cmap='gray')
+axes[1, 0].imshow(img2_resized, cmap='gray')
+axes[1, 1].imshow(new_overlay, cmap='gray')
 plt.show()
-

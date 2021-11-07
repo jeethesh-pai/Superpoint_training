@@ -35,8 +35,9 @@ data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuff
 # include num_workers if trained on GPU
 # Net = SuperPointNet()
 # Net.load_state_dict(weight_dict)
-Net = SuperPointNetBatchNorm2()
-weights = load_model(config['pretrained'], Net)
+Net = SuperPointNet()
+# weights = load_model(config['pretrained'], Net)
+weights = torch.load(config['pretrained'], map_location=device)
 Net.load_state_dict(weights)
 Net.to(device)
 Net.train(mode=False)
@@ -52,7 +53,8 @@ if config['data']['generate_label']:
         tqdm_bar.set_description(f"{args.split} Labels being created...")
         agg_label = np.zeros_like(sample['image'])
         sample['image'] = sample['image'].to(device)
-        sample['warped_image'] = sample['warped_image'].to(device).squeeze()  # squeeze the batch dimension as its 1
+        sample['warped_image'] = sample['warped_image'].to(device)  # squeeze the additional dimensions and make
+        # batch dimension as its 1st dimension
         sample['homography'] = sample['homography'].to(device)
         sample['inv_homography'] = sample['inv_homography'].to(device)
         # to store the homographic detections for averaging the response
@@ -64,6 +66,12 @@ if config['data']['generate_label']:
             # warped_image = sample['warped_image'].unsqueeze(1)
             # batch size for prediction
             for batch in range(sample['image'].shape[0]):
+                fig, axes = plt.subplots(2, 2)
+                axes[0, 0].imshow(sample['warped_image'][batch, 1, ...].numpy().squeeze(), cmap='gray')
+                axes[0, 1].imshow(sample['warped_image'][batch, 0, ...].numpy().squeeze(), cmap='gray')
+                axes[1, 0].imshow(sample['warped_image'][batch, 2, ...].numpy().squeeze(), cmap='gray')
+                axes[1, 1].imshow(sample['warped_image'][batch, 3, ...].numpy().squeeze(), cmap='gray')
+                plt.show()
                 output_warped = Net(sample['warped_image'][batch, ...].unsqueeze(1))
                 semi_warped, _ = output_warped['semi'], output_warped['desc']
                 batch_heatmap = semi_to_heatmap(semi_warped)
@@ -96,8 +104,8 @@ if config['data']['generate_label']:
                 pts = list(zip(pts[1], pts[0]))  # saves points in the form pts =
                 # (array(y axis coordinates), array(x axis coordinates))
                 filename = os.path.join(label_path, split, sample['name'][batch][:-4])
-                # plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
-                #                         img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
-                # plt.show()
-                # print('something')
-                np.save(filename, pts)
+                plt.imshow(points_to_2D(np.asarray(pts, dtype=np.int16), H, W,
+                                        img=sample['image'][batch, ...].to('cpu').numpy().squeeze() * 255), cmap='gray')
+                plt.show()
+                print('something')
+                # np.save(filename, pts)

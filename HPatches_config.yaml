@@ -13,7 +13,7 @@ data:
             GaussianBlur: {sigma: 0.2}
     cache_in_memory: false
     preprocessing:
-        resize: [320, 216]  # width, height
+        resize: [320, 240]  # width, height
         # resize: [480, 640]
     augmentation:
         photometric:

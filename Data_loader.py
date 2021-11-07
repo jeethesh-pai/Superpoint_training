@@ -77,7 +77,7 @@ class TLSScanData(Dataset):
             sample['homography'] = homographies
             sample['inv_homography'] = inv_homography
             sample['warped_image'] = inv_warp_image_batch(warped_image.unsqueeze(1), mode='bilinear',
-                                                          mat_homo_inv=sample['homography']).unsqueeze(0)
+                                                          mat_homo_inv=sample['homography'])
             sample['warped_mask'] = inv_warp_image_batch(torch.cat([sample['valid_mask'].unsqueeze(0)]*num_iter, dim=0),
                                                          sample['homography']).unsqueeze(0)
             if self.config['data'].get('labels', False):

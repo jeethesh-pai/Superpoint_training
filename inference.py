@@ -139,7 +139,7 @@ def draw_matches_superpoint_Sift(img1: str, img2: str, size: tuple):
 
 
 #  "../pytorch-superpoint/datasets/TLS_Train/Train/"
-image_dir = "../Dataset/HPatches/i_ajuntament/"
+image_dir = "../Dataset/HPatches/v_churchill/"
 mscoco_image_dir = "../Dataset/MSCOCO/"
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
@@ -150,8 +150,8 @@ device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cp
 # weight_dict = torch.load(checkpoint_path)
 # Net.load_state_dict(weight_dict)
 
-Net = SuperPointNetBatchNorm2()
-weight_dict = torch.load("../descriptorTrainingAfterIter2_2.pt", map_location=torch.device(device))
+Net = SuperPointNetBatchNorm()
+weight_dict = torch.load("../descriptorTrainingAfterIter2corrected_loss_2.pt", map_location=torch.device(device))
 Net.load_state_dict(weight_dict)
 # Net = SuperPointNet_gauss2()
 # model_weights = torch.load("superPointNet_170000_checkpoint.pth.tar", map_location=device)
