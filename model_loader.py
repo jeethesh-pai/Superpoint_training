@@ -574,6 +574,6 @@ class ResNetSuperPoint(torch.nn.Module):
         x = self.layer2(x)
         x = self.convPa(x)
         semi = self.convPb(x)
-        return {"semi": semi}
+        return {"semi": semi, "desc": semi}
 
 

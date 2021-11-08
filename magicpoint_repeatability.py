@@ -2,7 +2,7 @@ import torch
 import yaml
 from Synthetic_dataset_loader import SyntheticDataset
 from HPatches_dataset import HPatches
-from model_loader import detector_post_processing, SuperPointNetBatchNorm2, semi_to_heatmap
+from model_loader import detector_post_processing, SuperPointNetBatchNorm2, semi_to_heatmap, ResNetSuperPoint
 from torchsummary import summary
 from Data_loader import TLSScanData
 from utils import inv_warp_image_batch, getPtsFromHeatmap
@@ -112,14 +112,14 @@ with open(config_file_path) as path:
 size = config['data']['preprocessing']['resize']
 epsilon = config['model']['epsilon']
 device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-model = SuperPointNetBatchNorm2()
+model = ResNetSuperPoint()
 model_weights = torch.load(config['pretrained'], map_location=device)
 model.load_state_dict(model_weights)
 batch_size = config['model']['batch_size']
 model.to(device)
 summary(model, input_size=(1, size[0], size[1]))
-data_set = TLSScanData(transform=None, task='val', **config)
-# data_set = SyntheticDataset(transform=None, task='test', **config)
+# data_set = TLSScanData(transform=None, task='val', **config)
+data_set = SyntheticDataset(transform=None, task='test', **config)
 # data_set = HPatches(transform=None, **config)
 data_loader = torch.utils.data.DataLoader(data_set, batch_size=batch_size, shuffle=False)
 tqdm_bar = tqdm.tqdm(data_loader)

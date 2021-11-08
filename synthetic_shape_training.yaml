@@ -95,7 +95,7 @@ tensorboard_interval: 200 # 200
 save_interval: 200 # 2000
 validation_size: 5
 
-pretrained: "../magicpointBN_10_iter.pt"
+pretrained: "../Resmagicpoint.pt"
 
 
 
